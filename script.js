@@ -84,24 +84,24 @@ function applyModelSeo() {
 window.addEventListener('hashchange', applyModelSeo);
 applyModelSeo();
 
-// Official TROX product visuals and documentation sources.
-// The previous generated SVG placeholders remain only as fallback files in the PR;
-// all visible catalog/detail images are replaced with official TROX media at runtime.
+// Official TROX product visuals and product/download pages.
+// If a TROX media endpoint is temporarily unavailable, retain the local SVG as a fallback
+// rather than show a broken image.
 const troxProducts = {
   'FKA2-EU': {
-    image: 'https://cdn.trox.de/7ed3c52f5ad7acc6/5426075c4015/FK2-EU_img_09psd.png',
+    image: 'https://cdn.trox.de/536376718a7bff22/0378ea32f310/FK2-EU_img_09psd.psd.link',
     page: 'https://www.trox.be/en/fire-dampers/fka2-eu-003fbb2088c44811'
   },
   'FK2-EU': {
-    image: 'https://cdn0.scrvt.com/trox/1fef8edc77d32932/53aea7d707f1/FK2-EU_img_12.png',
+    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiI4ODk4NGExNWRiYjdlNzdkL2MxNTQ4OTBkMGFhNS9GSzItRVVfaW1nXzkwcG5nLnBuZyIsIm9ial9pZCI6Ijg4OTg0YTE1ZGJiN2U3N2QiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--8272f1bfe61761b161f14eb4bf490e6f5919bc8f',
     page: 'https://www.trox.de/en/fire-dampers/fk2-eu-6a7ebbadc72c1037'
   },
   'FKR-EU': {
-    image: 'https://cdn0.scrvt.com/trox/5d2b663b23326b73/01dba3ea0e8b/Produktbild-FKR-EU.png',
+    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiI1ZDJiNjYzYjIzMzI2YjczLzAxZGJhM2VhMGU4Yi9Qcm9kdWt0YmlsZC1GS1ItRVUucG5nIiwib2JqX2lkIjoiNWQyYjY2M2IyMzMyNmI3MyIsInRyYW5zZm9ybWF0aW9uX2RlZmluaXRpb24iOnsid2lkdGgiOjYwMH19--1ae50209b59fad817c52161f10f4581f82fa8af4',
     page: 'https://www.trox.de/en/fire-dampers/fkr-eu-69c6216a6d944cc9'
   },
   'FKRS-EU': {
-    image: 'https://cdn0.scrvt.com/trox/7d9bfe6320842a93/a45a8a6d5210/00136610_0.png',
+    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJhMjg1Yzg1N2QzYWFkNWM0LzE0NjAyYzA5YjRmZi9GS1JTLUVVLWludHJvZHVjdGlvbi1pbWFnZS5wbmciLCJvYmpfaWQiOiJhMjg1Yzg1N2QzYWFkNWM0IiwidHJhbnNmb3JtYXRpb25fZGVmaW5pdGlvbiI6eyJ3aWR0aCI6NjAwfX0%3D--c07842ea4cc97398d77e2ba176757116a81a439b',
     page: 'https://www.trox.de/en/fire-dampers/fkrs-eu-e44c04db778f79a6'
   },
   'KA2-EU': {
@@ -109,18 +109,20 @@ const troxProducts = {
     page: 'https://www.trox.de/en/fire-dampers/ka2-eu-1ac28fd4d1bb18a5'
   },
   'EK-JZ': {
-    image: 'https://cdn.trox.de/3545691203b90813/4f78fb584ddd/v/da7a24af7f8d/EK-JZ_img_19psd.png',
+    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiIzNTQ1NjkxMjAzYjkwODEzL2ZlOGM2ZjBhYjFlZS9FSy1KWl9pbWdfMTlwc2QucG5nIiwib2JqX2lkIjoiMzU0NTY5MTIwM2I5MDgxMyIsInRyYW5zZm9ybWF0aW9uX2RlZmluaXRpb24iOnsid2lkdGgiOjYwMH19--33d95c9f30f26119fb08e9b08113990a473d2643',
     page: 'https://www.trox.de/en/smoke-control-damper/ek-jz-605db13990db172d'
   },
   'EK2-EU': {
-    image: 'https://cdn.trox.de/77999b79b47c76d4/a4a2debe946e/EK2-EU-introduction-image-english.png',
+    image: 'https://cdn.trox.de/77999b79b47c76d4/04512dfd7970/v/b43bca986da5/EK2-EU-introduction-image-english.png',
     page: 'https://www.trox.de/en/smoke-control-damper/ek2-eu-3d057b1570acb468'
   },
   'EK-JS': {
-    image: 'https://cdn.trox.de/408c34038faaf72d/9b47c9889882/v/4d349e5de49a/EK-JS-introduction-and-navigation-image.png',
+    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJjNGVhYzJlZmRiMjAxYzFlL2JiNzgwMzAzMDdlMi9FSy1KU19pbWdfMDFwc2QucG5nIiwib2JqX2lkIjoiYzRlYWMyZWZkYjIwMWMxZSIsInRyYW5zZm9ybWF0aW9uX2RlZmluaXRpb24iOnsid2lkdGgiOjYwMH19--7d9b45f724ea956776de3893a861d27b73daf63c',
     page: 'https://www.trox.de/en/smoke-control-damper/ek-js-fbd700e6e81da044'
   }
 };
+
+const docLinkStyle = 'font-size:11px;color:#0874ba;display:flex;flex-direction:column;gap:3px;text-decoration:none;';
 
 function applyOfficialTroxMedia(container, headingSelector) {
   const heading = container.querySelector(headingSelector);
@@ -131,21 +133,26 @@ function applyOfficialTroxMedia(container, headingSelector) {
 
   const image = container.querySelector('.product-image img, .detail-image img');
   if (image) {
+    const localFallback = image.getAttribute('src');
     image.src = product.image;
     image.alt = `TROX ${model} — официальное изображение изделия`;
     image.loading = 'lazy';
     image.referrerPolicy = 'no-referrer';
     image.style.objectFit = 'contain';
     image.style.background = '#fff';
+    image.onerror = () => {
+      image.onerror = null;
+      image.src = localFallback;
+    };
   }
 
   const docs = container.querySelector('.docs');
   if (docs) {
     docs.innerHTML = `
       <b>Документы TROX</b>
-      <a href="${product.page}" target="_blank" rel="noopener noreferrer">Технический лист ↗</a>
-      <a href="${product.page}" target="_blank" rel="noopener noreferrer">Сертификаты / DoP ↗</a>
-      <a href="${product.page}" target="_blank" rel="noopener noreferrer">Монтажная инструкция ↗</a>
+      <a style="${docLinkStyle}" href="${product.page}#downloads" target="_blank" rel="noopener noreferrer">Технический лист ↗</a>
+      <a style="${docLinkStyle}" href="${product.page}#downloads" target="_blank" rel="noopener noreferrer">Сертификаты / DoP ↗</a>
+      <a style="${docLinkStyle}" href="${product.page}#downloads" target="_blank" rel="noopener noreferrer">Монтажная инструкция ↗</a>
       <span>BIM / CAD <em>по запросу BOOM</em></span>`;
   }
 }
@@ -153,9 +160,49 @@ function applyOfficialTroxMedia(container, headingSelector) {
 document.querySelectorAll('.product-card').forEach((card) => applyOfficialTroxMedia(card, 'h2'));
 document.querySelectorAll('.model-detail').forEach((detail) => applyOfficialTroxMedia(detail, 'h2'));
 
-// Bring EK-JZ card flow-rate text in line with the current TROX product page.
+// Corrections verified against current TROX product pages.
 document.querySelectorAll('.product-card').forEach((card) => {
-  if (card.querySelector('h2')?.textContent.trim() !== 'EK-JZ') return;
-  const flowItem = [...card.querySelectorAll('.card-specs li')].find((item) => item.textContent.trim().startsWith('Расход:'));
-  if (flowItem) flowItem.textContent = 'Расход: до 131 544 м³/ч';
+  const model = card.querySelector('h2')?.textContent.trim();
+  const specs = [...card.querySelectorAll('.card-specs li')];
+
+  if (model === 'EK-JZ') {
+    const flowItem = specs.find((item) => item.textContent.trim().startsWith('Расход:'));
+    if (flowItem) flowItem.textContent = 'Расход: до 131 544 м³/ч';
+  }
+
+  if (model === 'EK-JS') {
+    const temperatureItem = specs.find((item) => item.textContent.trim().startsWith('Температура:'));
+    if (temperatureItem) temperatureItem.textContent = 'Дымовые газы: до 600 °C';
+  }
+
+  if (model === 'FK2-EU') {
+    const typeItem = specs.find((item) => item.textContent.trim().startsWith('Тип:'));
+    if (typeItem) typeItem.textContent = 'Размеры: 200 × 100 – 1500 × 800 мм';
+  }
+
+  if (model === 'KA2-EU') {
+    const platformItem = specs.find((item) => item.textContent.trim().startsWith('Платформа:'));
+    if (platformItem) platformItem.textContent = 'Ширина: 250–1200 мм';
+  }
 });
+
+const ekJzDetail = document.querySelector('#details-ek-jz .tech-table');
+if (ekJzDetail) {
+  const row = [...ekJzDetail.querySelectorAll('div')].find((item) => item.querySelector('dt')?.textContent.trim() === 'Рабочие параметры');
+  const dd = row?.querySelector('dd');
+  if (dd) dd.textContent = 'До 131 544 м³/ч; рабочее давление −1000…+500 Па.';
+}
+
+const ekJsDetail = document.querySelector('#details-ek-js .tech-table');
+if (ekJsDetail) {
+  const row = [...ekJsDetail.querySelectorAll('div')].find((item) => item.querySelector('dt')?.textContent.trim() === 'Рабочие параметры');
+  const dd = row?.querySelector('dd');
+  if (dd) dd.textContent = '360–115 110 м³/ч; −1500…+500 Па; допускается применение в среде дымовых газов до 600 °C.';
+}
+
+const ka2Detail = document.querySelector('#details-ka2-eu .tech-table');
+if (ka2Detail) {
+  const row = [...ka2Detail.querySelectorAll('div')].find((item) => item.querySelector('dt')?.textContent.trim() === 'Размерный диапазон');
+  const dd = row?.querySelector('dd');
+  if (dd) dd.textContent = 'Ширина 250–1200 мм; высота 250–500 мм; длина 580 мм при H ≤ 400 мм или 680 мм при H = 500 мм.';
+}
