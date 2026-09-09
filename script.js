@@ -83,3 +83,79 @@ function applyModelSeo() {
 }
 window.addEventListener('hashchange', applyModelSeo);
 applyModelSeo();
+
+// Official TROX product visuals and documentation sources.
+// The previous generated SVG placeholders remain only as fallback files in the PR;
+// all visible catalog/detail images are replaced with official TROX media at runtime.
+const troxProducts = {
+  'FKA2-EU': {
+    image: 'https://cdn.trox.de/7ed3c52f5ad7acc6/5426075c4015/FK2-EU_img_09psd.png',
+    page: 'https://www.trox.be/en/fire-dampers/fka2-eu-003fbb2088c44811'
+  },
+  'FK2-EU': {
+    image: 'https://cdn0.scrvt.com/trox/1fef8edc77d32932/53aea7d707f1/FK2-EU_img_12.png',
+    page: 'https://www.trox.de/en/fire-dampers/fk2-eu-6a7ebbadc72c1037'
+  },
+  'FKR-EU': {
+    image: 'https://cdn0.scrvt.com/trox/5d2b663b23326b73/01dba3ea0e8b/Produktbild-FKR-EU.png',
+    page: 'https://www.trox.de/en/fire-dampers/fkr-eu-69c6216a6d944cc9'
+  },
+  'FKRS-EU': {
+    image: 'https://cdn0.scrvt.com/trox/7d9bfe6320842a93/a45a8a6d5210/00136610_0.png',
+    page: 'https://www.trox.de/en/fire-dampers/fkrs-eu-e44c04db778f79a6'
+  },
+  'KA2-EU': {
+    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJlN2U0ZTg1MTU5ZTk5MzZiLzUwOGZmOTc3MDc0Mi9TY3JlZW5zaG90LTIwMjUtMDUtMDYtMTQwMTU2LnBuZyIsIm9ial9pZCI6ImU3ZTRlODUxNTllOTkzNmIiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--1d8cb6adcf65d412891da96fb61b932247c5b27f',
+    page: 'https://www.trox.de/en/fire-dampers/ka2-eu-1ac28fd4d1bb18a5'
+  },
+  'EK-JZ': {
+    image: 'https://cdn.trox.de/3545691203b90813/4f78fb584ddd/v/da7a24af7f8d/EK-JZ_img_19psd.png',
+    page: 'https://www.trox.de/en/smoke-control-damper/ek-jz-605db13990db172d'
+  },
+  'EK2-EU': {
+    image: 'https://cdn.trox.de/77999b79b47c76d4/a4a2debe946e/EK2-EU-introduction-image-english.png',
+    page: 'https://www.trox.de/en/smoke-control-damper/ek2-eu-3d057b1570acb468'
+  },
+  'EK-JS': {
+    image: 'https://cdn.trox.de/408c34038faaf72d/9b47c9889882/v/4d349e5de49a/EK-JS-introduction-and-navigation-image.png',
+    page: 'https://www.trox.de/en/smoke-control-damper/ek-js-fbd700e6e81da044'
+  }
+};
+
+function applyOfficialTroxMedia(container, headingSelector) {
+  const heading = container.querySelector(headingSelector);
+  if (!heading) return;
+  const model = heading.textContent.trim();
+  const product = troxProducts[model];
+  if (!product) return;
+
+  const image = container.querySelector('.product-image img, .detail-image img');
+  if (image) {
+    image.src = product.image;
+    image.alt = `TROX ${model} — официальное изображение изделия`;
+    image.loading = 'lazy';
+    image.referrerPolicy = 'no-referrer';
+    image.style.objectFit = 'contain';
+    image.style.background = '#fff';
+  }
+
+  const docs = container.querySelector('.docs');
+  if (docs) {
+    docs.innerHTML = `
+      <b>Документы TROX</b>
+      <a href="${product.page}" target="_blank" rel="noopener noreferrer">Технический лист ↗</a>
+      <a href="${product.page}" target="_blank" rel="noopener noreferrer">Сертификаты / DoP ↗</a>
+      <a href="${product.page}" target="_blank" rel="noopener noreferrer">Монтажная инструкция ↗</a>
+      <span>BIM / CAD <em>по запросу BOOM</em></span>`;
+  }
+}
+
+document.querySelectorAll('.product-card').forEach((card) => applyOfficialTroxMedia(card, 'h2'));
+document.querySelectorAll('.model-detail').forEach((detail) => applyOfficialTroxMedia(detail, 'h2'));
+
+// Bring EK-JZ card flow-rate text in line with the current TROX product page.
+document.querySelectorAll('.product-card').forEach((card) => {
+  if (card.querySelector('h2')?.textContent.trim() !== 'EK-JZ') return;
+  const flowItem = [...card.querySelectorAll('.card-specs li')].find((item) => item.textContent.trim().startsWith('Расход:'));
+  if (flowItem) flowItem.textContent = 'Расход: до 131 544 м³/ч';
+});
