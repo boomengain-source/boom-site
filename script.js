@@ -72,3 +72,14 @@ if (mailIcon) {
       <path d="M21.75 6.75v10.5A2.25 2.25 0 0 1 19.5 19.5h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15A2.25 2.25 0 0 0 2.25 6.75m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0l-7.5-4.615A2.25 2.25 0 0 1 2.25 6.993V6.75"></path>
     </svg>`;
 }
+
+// Give each model deep-link a unique browser title and description.
+const defaultSeo = { title: document.title, description: document.querySelector('meta[name="description"]')?.content || '' };
+function applyModelSeo() {
+  const detail = location.hash ? document.querySelector(location.hash) : null;
+  const meta = document.querySelector('meta[name="description"]');
+  document.title = detail?.dataset.seoTitle || defaultSeo.title;
+  if (meta) meta.content = detail?.dataset.seoDescription || defaultSeo.description;
+}
+window.addEventListener('hashchange', applyModelSeo);
+applyModelSeo();
