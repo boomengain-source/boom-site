@@ -46,7 +46,6 @@ mainNav.addEventListener('click', () => {
   menuToggle.setAttribute('aria-expanded', 'false');
 });
 
-// Use the actual BOOM Engineering logo from the live site.
 const headerLogo = document.querySelector('.site-header .logo img');
 if (headerLogo) {
   headerLogo.src = 'https://boom-eng.ru/wp-content/themes/boom-theme/assets/images/logo.png';
@@ -56,7 +55,6 @@ if (headerLogo) {
   headerLogo.style.objectFit = 'contain';
 }
 
-// Replace temporary contact marks with explicit, recognizable outline icons.
 const phoneIcon = document.querySelector('.contact-left a[href^="tel:"] .contact-icon');
 if (phoneIcon) {
   phoneIcon.outerHTML = `
@@ -73,7 +71,6 @@ if (mailIcon) {
     </svg>`;
 }
 
-// Give each model deep-link a unique browser title and description.
 const defaultSeo = { title: document.title, description: document.querySelector('meta[name="description"]')?.content || '' };
 function applyModelSeo() {
   const detail = location.hash ? document.querySelector(location.hash) : null;
@@ -84,9 +81,6 @@ function applyModelSeo() {
 window.addEventListener('hashchange', applyModelSeo);
 applyModelSeo();
 
-// Official TROX product visuals and product/download pages.
-// If a TROX media endpoint is temporarily unavailable, retain the local SVG as a fallback
-// rather than show a broken image.
 const troxProducts = {
   'FKA2-EU': {
     image: 'https://cdn.trox.de/536376718a7bff22/0378ea32f310/FK2-EU_img_09psd.psd.link',
@@ -160,7 +154,6 @@ function applyOfficialTroxMedia(container, headingSelector) {
 document.querySelectorAll('.product-card').forEach((card) => applyOfficialTroxMedia(card, 'h2'));
 document.querySelectorAll('.model-detail').forEach((detail) => applyOfficialTroxMedia(detail, 'h2'));
 
-// Corrections verified against current TROX product pages.
 document.querySelectorAll('.product-card').forEach((card) => {
   const model = card.querySelector('h2')?.textContent.trim();
   const specs = [...card.querySelectorAll('.card-specs li')];
@@ -184,6 +177,11 @@ document.querySelectorAll('.product-card').forEach((card) => {
     const platformItem = specs.find((item) => item.textContent.trim().startsWith('Платформа:'));
     if (platformItem) platformItem.textContent = 'Ширина: 250–1200 мм';
   }
+
+  if (model === 'EK2-EU') {
+    const dopItem = specs.find((item) => item.textContent.trim().startsWith('DoP:'));
+    if (dopItem) dopItem.textContent = 'DoP: EK2-EU/DE/003';
+  }
 });
 
 const ekJzDetail = document.querySelector('#details-ek-jz .tech-table');
@@ -205,4 +203,11 @@ if (ka2Detail) {
   const row = [...ka2Detail.querySelectorAll('div')].find((item) => item.querySelector('dt')?.textContent.trim() === 'Размерный диапазон');
   const dd = row?.querySelector('dd');
   if (dd) dd.textContent = 'Ширина 250–1200 мм; высота 250–500 мм; длина 580 мм при H ≤ 400 мм или 680 мм при H = 500 мм.';
+}
+
+const ek2Detail = document.querySelector('#details-ek2-eu .tech-table');
+if (ek2Detail) {
+  const row = [...ek2Detail.querySelectorAll('div')].find((item) => item.querySelector('dt')?.textContent.trim() === 'Стандарты и классификация');
+  const dd = row?.querySelector('dd');
+  if (dd) dd.textContent = 'EN 12101-8 · EN 1366-10 · EN 1366-2 · DoP/EK2-EU/DE/003.';
 }
