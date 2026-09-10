@@ -87,7 +87,7 @@ const troxProducts = {
     page: 'https://www.trox.be/en/fire-dampers/fka2-eu-003fbb2088c44811'
   },
   'FK2-EU': {
-    image: 'assets/images/fk2-eu-product.jpg',
+    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiI1YmQxMGE4MTkwODk1MjQxLzY2N2JmOGViZTc4Ny9GSzItRVVfaW1nXzkwcG5nLnBuZyIsIm9ial9pZCI6IjViZDEwYTgxOTA4OTUyNDEiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--0d8bf7564b2159403caeecff8e29d5aa46ba774b',
     page: 'https://www.trox.de/en/fire-dampers/fk2-eu-6a7ebbadc72c1037'
   },
   'FKR-EU': {
@@ -99,7 +99,7 @@ const troxProducts = {
     page: 'https://www.trox.de/en/fire-dampers/fkrs-eu-e44c04db778f79a6'
   },
   'KA2-EU': {
-    image: 'assets/images/ka2-eu-product.jpg',
+    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJjN2Q5ODkyZWMyMzlkMTE2L2U4OWIwZTAzOTUxNC9TY3JlZW5zaG90LTIwMjUtMDUtMDYtMTQwMTU2LnBuZyIsIm9ial9pZCI6ImM3ZDk4OTJlYzIzOWQxMTYiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--b88e6101d3b7a627b01f45ad5abafdaaa77f525e',
     page: 'https://www.trox.de/en/fire-dampers/ka2-eu-1ac28fd4d1bb18a5'
   },
   'EK-JZ': {
@@ -107,7 +107,7 @@ const troxProducts = {
     page: 'https://www.trox.de/en/smoke-control-damper/ek-jz-605db13990db172d'
   },
   'EK2-EU': {
-    image: 'assets/images/ek2-eu-product.jpg',
+    image: 'https://cdn.trox.de/77999b79b47c76d4/04512dfd7970/v/1a733c7f6065/EK2-EU-introduction-image-english.png',
     page: 'https://www.trox.de/en/smoke-control-damper/ek2-eu-3d057b1570acb468'
   },
   'EK-JS': {
@@ -128,6 +128,7 @@ function applyOfficialTroxMedia(container, headingSelector) {
   const image = container.querySelector('.product-image img, .detail-image img');
   if (image) {
     const localFallback = image.getAttribute('src');
+    image.referrerPolicy = 'no-referrer';
     image.src = product.image;
     image.alt = `TROX ${model} — изображение изделия`;
     image.loading = 'lazy';
