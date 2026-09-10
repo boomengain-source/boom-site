@@ -1,5 +1,5 @@
 User-agent: *
-Allow: /
+Disallow: /
 
-Sitemap: https://boomengain-source.github.io/boom-site/sitemap.xml
-# Catalog build: 2026-09-10
+# GitHub Pages is a staging preview only.
+# Production SEO must use https://boom-eng.ru/
