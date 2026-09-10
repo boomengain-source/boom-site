@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://boomengain-source.github.io/boom-site/sitemap.xml
+# Catalog build: 2026-09-10
