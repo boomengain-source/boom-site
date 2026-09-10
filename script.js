@@ -87,7 +87,7 @@ const troxProducts = {
     page: 'https://www.trox.be/en/fire-dampers/fka2-eu-003fbb2088c44811'
   },
   'FK2-EU': {
-    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiI4ODk4NGExNWRiYjdlNzdkL2MxNTQ4OTBkMGFhNS9GSzItRVVfaW1nXzkwcG5nLnBuZyIsIm9ial9pZCI6Ijg4OTg0YTE1ZGJiN2U3N2QiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--8272f1bfe61761b161f14eb4bf490e6f5919bc8f',
+    image: 'assets/images/fk2-eu-product.jpg',
     page: 'https://www.trox.de/en/fire-dampers/fk2-eu-6a7ebbadc72c1037'
   },
   'FKR-EU': {
@@ -99,7 +99,7 @@ const troxProducts = {
     page: 'https://www.trox.de/en/fire-dampers/fkrs-eu-e44c04db778f79a6'
   },
   'KA2-EU': {
-    image: 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJlN2U0ZTg1MTU5ZTk5MzZiLzUwOGZmOTc3MDc0Mi9TY3JlZW5zaG90LTIwMjUtMDUtMDYtMTQwMTU2LnBuZyIsIm9ial9pZCI6ImU3ZTRlODUxNTllOTkzNmIiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--1d8cb6adcf65d412891da96fb61b932247c5b27f',
+    image: 'assets/images/ka2-eu-product.jpg',
     page: 'https://www.trox.de/en/fire-dampers/ka2-eu-1ac28fd4d1bb18a5'
   },
   'EK-JZ': {
@@ -107,7 +107,7 @@ const troxProducts = {
     page: 'https://www.trox.de/en/smoke-control-damper/ek-jz-605db13990db172d'
   },
   'EK2-EU': {
-    image: 'https://cdn.trox.de/77999b79b47c76d4/04512dfd7970/v/b43bca986da5/EK2-EU-introduction-image-english.png',
+    image: 'assets/images/ek2-eu-product.jpg',
     page: 'https://www.trox.de/en/smoke-control-damper/ek2-eu-3d057b1570acb468'
   },
   'EK-JS': {
@@ -129,9 +129,8 @@ function applyOfficialTroxMedia(container, headingSelector) {
   if (image) {
     const localFallback = image.getAttribute('src');
     image.src = product.image;
-    image.alt = `TROX ${model} — официальное изображение изделия`;
+    image.alt = `TROX ${model} — изображение изделия`;
     image.loading = 'lazy';
-    image.referrerPolicy = 'no-referrer';
     image.style.objectFit = 'contain';
     image.style.background = '#fff';
     image.onerror = () => {
