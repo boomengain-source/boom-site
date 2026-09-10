@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://boomengain-source.github.io/boom-site/sitemap.xml
