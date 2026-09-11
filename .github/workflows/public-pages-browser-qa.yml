@@ -1,0 +1,210 @@
+name: Public GitHub Pages Chromium QA — TROX catalogue
+
+on:
+  push:
+    paths:
+      - '.github/workflows/public-pages-browser-qa.yml'
+      - 'trox-*.html'
+      - 'styles.css'
+      - 'script.js'
+      - 'assets/images/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-pages-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --save-dev playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Wait until GitHub Pages serves this revision
+        env:
+          PUBLIC_BASE: https://boomengain-source.github.io/boom-site
+        run: |
+          set -euo pipefail
+          local_hash="$(sha256sum trox-catalog.html | awk '{print $1}')"
+          url="${PUBLIC_BASE}/trox-catalog.html?qa=${GITHUB_SHA}"
+          echo "Waiting for public catalogue hash ${local_hash} from ${url}"
+          for attempt in {1..72}; do
+            if curl -fsSL --connect-timeout 10 --max-time 30 -H 'Cache-Control: no-cache' "$url" -o /tmp/public-catalog.html; then
+              remote_hash="$(sha256sum /tmp/public-catalog.html | awk '{print $1}')"
+              echo "Attempt ${attempt}: public hash ${remote_hash}"
+              if [ "$remote_hash" = "$local_hash" ]; then
+                echo "GitHub Pages is serving the current revision."
+                exit 0
+              fi
+            else
+              echo "Attempt ${attempt}: public page not available yet"
+            fi
+            sleep 5
+          done
+          echo "GitHub Pages did not converge to the current revision."
+          exit 1
+
+      - name: Run Chromium QA against published GitHub Pages
+        env:
+          PUBLIC_BASE: https://boomengain-source.github.io/boom-site
+        run: |
+          mkdir -p qa-public/screenshots
+          cat > public-pages-qa.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+
+          const base = process.env.PUBLIC_BASE;
+          const sha = process.env.GITHUB_SHA;
+          const pages = [
+            'trox-catalog.html',
+            'trox-vav.html',
+            'trox-fire-smoke-dampers.html',
+            'trox-air-handling-units.html',
+            'trox-air-diffusers.html',
+            'trox-cleanrooms.html',
+            'trox-bibo-safe-change.html',
+            'trox-sound-attenuators.html',
+          ];
+          const viewports = [
+            {name:'desktop', width:1920, height:1080},
+            {name:'mobile', width:390, height:844},
+          ];
+          const failures = [];
+          const matrix = [];
+          const browser = await chromium.launch({headless:true});
+
+          for (const vp of viewports) {
+            const context = await browser.newContext({
+              viewport: {width:vp.width, height:vp.height},
+              deviceScaleFactor: 1,
+              locale: 'ru-RU',
+            });
+            for (const file of pages) {
+              const p = await context.newPage();
+              const consoleErrors = [];
+              const pageErrors = [];
+              p.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+              p.on('pageerror', e => pageErrors.push(String(e)));
+              const url = `${base}/${file}?qa=${sha}`;
+              let gotoError = null;
+              try {
+                const response = await p.goto(url, {waitUntil:'domcontentloaded', timeout:30000});
+                if (!response || !response.ok()) gotoError = `HTTP ${response?.status() ?? 'no-response'}`;
+                await p.evaluate(() => document.querySelectorAll('img').forEach(img => { img.loading = 'eager'; }));
+                await p.evaluate(async () => {
+                  const imgs = [...document.images];
+                  await Promise.all(imgs.map(img => {
+                    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                    return new Promise(r => {
+                      const done = () => r();
+                      img.addEventListener('load', done, {once:true});
+                      img.addEventListener('error', done, {once:true});
+                      setTimeout(done, 5000);
+                    });
+                  }));
+                  await Promise.all(imgs.map(img => img.decode ? img.decode().catch(() => {}) : Promise.resolve()));
+                  if (document.fonts?.ready) await document.fonts.ready;
+                });
+              } catch (e) {
+                gotoError = String(e);
+              }
+
+              const result = await p.evaluate(() => {
+                const visible = el => {
+                  const s = getComputedStyle(el);
+                  const r = el.getBoundingClientRect();
+                  return s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity || '1') > 0 && r.width > 0 && r.height > 0;
+                };
+                const de = document.documentElement;
+                const brokenImages = [...document.images]
+                  .filter(img => visible(img) && (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0))
+                  .map(img => ({src:img.getAttribute('src'), alt:img.getAttribute('alt') || ''}));
+                const lowDensity = [...document.images]
+                  .filter(img => visible(img) && img.naturalWidth > 0 && !img.src.endsWith('.svg'))
+                  .map(img => {
+                    const r = img.getBoundingClientRect();
+                    return {src:img.getAttribute('src'), naturalWidth:img.naturalWidth, renderedWidth:r.width, ratio:r.width ? img.naturalWidth/r.width : 999};
+                  })
+                  .filter(x => x.ratio < 1.45);
+                const h1s = [...document.querySelectorAll('h1')].filter(visible).map(x => x.innerText.trim());
+                const horizontalOverflow = de.scrollWidth - de.clientWidth;
+                const criticalSelectors = [
+                  'h1','h2','.lead','.breadcrumbs','.product-card','.hub-card','.fd-card','.safe-card','.ac-card','.ahu-card',
+                  '.detail-layout','.tech-table','.product-grid','.hub-grid','.fd-grid','.safe-grid','.ac-grid','.ahu-grid',
+                  '.cta-inner','.main-nav','.site-header','.nav-inner','.contact-inner','.header-cta','.logo'
+                ].join(',');
+                const offscreen = [...document.querySelectorAll(criticalSelectors)]
+                  .filter(visible)
+                  .map(el => {
+                    const r = el.getBoundingClientRect();
+                    return {tag:el.tagName, cls:String(el.className || ''), left:r.left, right:r.right, width:r.width, text:(el.innerText || '').trim().slice(0,90)};
+                  })
+                  .filter(x => x.left < -3 || x.right > innerWidth + 3);
+                const emptyProductMedia = [...document.querySelectorAll('.product-image,.fd-visual,.safe-visual,.ac-visual,.ahu-visual,.detail-image,.detail-photo,.detail-image-real,.visual,.cat-visual,.ad-visual')]
+                  .filter(visible)
+                  .filter(box => !box.querySelector('img') || ![...box.querySelectorAll('img')].some(img => img.complete && img.naturalWidth > 0))
+                  .map(box => ({cls:String(box.className || ''), text:(box.innerText || '').trim().slice(0,80)}));
+                const textOverflow = [...document.querySelectorAll('h1,h2,h3,.button,.hub-models')]
+                  .filter(visible)
+                  .filter(el => el.scrollWidth > el.clientWidth + 3)
+                  .map(el => ({tag:el.tagName, cls:String(el.className || ''), clientWidth:el.clientWidth, scrollWidth:el.scrollWidth, text:(el.innerText || '').trim().slice(0,100)}));
+                return {h1s, brokenImages, lowDensity, horizontalOverflow, offscreen, emptyProductMedia, textOverflow, bodyHeight:document.body.scrollHeight};
+              });
+
+              const key = `${file} @ ${vp.name} ${vp.width}x${vp.height}`;
+              const errs = [];
+              if (gotoError) errs.push(`navigation: ${gotoError}`);
+              if (result.h1s.length !== 1) errs.push(`visible H1 count=${result.h1s.length}`);
+              if (result.brokenImages.length) errs.push(`broken images=${JSON.stringify(result.brokenImages)}`);
+              if (result.lowDensity.length) errs.push(`image density below 1.45x=${JSON.stringify(result.lowDensity.slice(0,8))}`);
+              if (result.emptyProductMedia.length) errs.push(`empty product media=${JSON.stringify(result.emptyProductMedia)}`);
+              if (result.horizontalOverflow > 3) errs.push(`horizontal overflow=${result.horizontalOverflow}px`);
+              if (result.offscreen.length) errs.push(`offscreen critical elements=${JSON.stringify(result.offscreen.slice(0,8))}`);
+              if (result.textOverflow.length) errs.push(`text overflow=${JSON.stringify(result.textOverflow.slice(0,8))}`);
+              if (pageErrors.length) errs.push(`page errors=${JSON.stringify(pageErrors)}`);
+              if (consoleErrors.length) errs.push(`console errors=${JSON.stringify(consoleErrors.slice(0,5))}`);
+              if (result.bodyHeight < 400) errs.push(`implausibly short page height=${result.bodyHeight}`);
+              if (errs.length) failures.push(`${key}: ${errs.join(' | ')}`);
+              matrix.push({file, viewport:vp.name, width:vp.width, height:vp.height, ...result, errors:errs});
+
+              const safe = file.replace('.html','');
+              await p.screenshot({path:`qa-public/screenshots/${safe}-${vp.name}.png`, fullPage:true});
+              await p.close();
+            }
+            await context.close();
+          }
+
+          await browser.close();
+          fs.writeFileSync('qa-public/public-pages-qa.json', JSON.stringify({sha, base, pages:pages.length, viewports, failures, matrix}, null, 2));
+          fs.writeFileSync('qa-public/public-pages-qa.txt', [
+            `SHA: ${sha}`,
+            `Public base: ${base}`,
+            `Pages: ${pages.length}`,
+            `Viewport passes: ${pages.length * viewports.length}`,
+            `Failures: ${failures.length}`,
+            '',
+            'FAILURES',
+            ...(failures.length ? failures : ['NONE']),
+          ].join('\n'));
+          console.log(`Published Pages: ${pages.length}`);
+          console.log(`Published viewport passes: ${pages.length * viewports.length}`);
+          console.log(`Published failures: ${failures.length}`);
+          failures.forEach(x => console.error('FAIL:', x));
+          if (failures.length) process.exit(1);
+          JS
+          node public-pages-qa.mjs
+
+      - name: Upload public Pages QA report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trox-public-pages-qa-${{ github.sha }}
+          path: qa-public/
+          if-no-files-found: error
+          retention-days: 14
