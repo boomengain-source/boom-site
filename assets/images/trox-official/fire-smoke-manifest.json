@@ -1,0 +1,82 @@
+{
+  "fka2-eu": {
+    "label": "FKA2-EU",
+    "file": "assets/images/trox-official/fka2-eu.png",
+    "width": 1124,
+    "height": 292,
+    "format": "PNG",
+    "source": "https://cdn.trox.de/32fd9966ca0a4774/d5641071eee2/v/6fc03e5feb78/TROX_Logo_with_claim_blue_1124px.png?nowebp=1",
+    "score": -520,
+    "bytes": 24140
+  },
+  "fk2-eu": {
+    "label": "FK2-EU",
+    "file": "assets/images/trox-official/fk2-eu.jpg",
+    "width": 800,
+    "height": 684,
+    "format": "JPEG",
+    "source": "https://cdn.trox.de/13d36efc7ed1ab81/55c520528cb0/FK2-EU_img_10-316478-_en_4C.jpg",
+    "score": 665,
+    "bytes": 95454
+  },
+  "fkr-eu": {
+    "label": "FKR-EU",
+    "file": "assets/images/trox-official/fkr-eu.png",
+    "width": 640,
+    "height": 480,
+    "format": "PNG",
+    "source": "https://cdn.trox.de/5d2b663b23326b73/01dba3ea0e8b/Produktbild-FKR-EU.png",
+    "score": 640,
+    "bytes": 184722
+  },
+  "fkrs-eu": {
+    "label": "FKRS-EU",
+    "file": "assets/images/trox-official/fkrs-eu.png",
+    "width": 1000,
+    "height": 459,
+    "format": "PNG",
+    "source": "https://cdn.trox.de/a285c857d3aad5c4/14602c09b4ff/FKRS-EU-introduction-image.png",
+    "score": 665,
+    "bytes": 397568
+  },
+  "ka2-eu": {
+    "label": "KA2-EU",
+    "file": "assets/images/trox-official/ka2-eu.png",
+    "width": 600,
+    "height": 424,
+    "format": "PNG",
+    "source": "https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJlN2U0ZTg1MTU5ZTk5MzZiLzUwOGZmOTc3MDc0Mi9TY3JlZW5zaG90LTIwMjUtMDUtMDYtMTQwMTU2LnBuZyIsIm9ial9pZCI6ImU3ZTRlODUxNTllOTkzNmIiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--1d8cb6adcf65d412891da96fb61b932247c5b27f",
+    "score": 145,
+    "bytes": 187948
+  },
+  "ek-jz": {
+    "label": "EK-JZ",
+    "file": "assets/images/trox-official/ek-jz.png",
+    "width": 826,
+    "height": 1000,
+    "format": "PNG",
+    "source": "https://cdn.trox.de/3545691203b90813/fe8c6f0ab1ee/EK-JZ_img_19psd.png",
+    "score": 845,
+    "bytes": 569844
+  },
+  "ek2-eu": {
+    "label": "EK2-EU",
+    "file": "assets/images/trox-official/ek2-eu.png",
+    "width": 639,
+    "height": 512,
+    "format": "PNG",
+    "source": "https://cdn.trox.de/77999b79b47c76d4/a4a2debe946e/EK2-EU-introduction-image-english.png",
+    "score": 665,
+    "bytes": 154285
+  },
+  "ek-js": {
+    "label": "EK-JS",
+    "file": "assets/images/trox-official/ek-js.png",
+    "width": 611,
+    "height": 1000,
+    "format": "PNG",
+    "source": "https://cdn.trox.de/c4eac2efdb201c1e/bb78030307e2/EK-JS_img_01psd.png",
+    "score": 845,
+    "bytes": 420104
+  }
+}
