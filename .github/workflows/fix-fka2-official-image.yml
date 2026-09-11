@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install PDF/image tools
         run: python -m pip install --disable-pip-version-check requests pymupdf pillow
-      - name: Extract cover product image from official TROX manuals
+      - name: Extract photographic FKA2-EU cover image from official TROX manuals
         shell: bash
         run: |
           set -euo pipefail
@@ -36,36 +36,36 @@ jobs:
             r=session.get(pdf_url,timeout=90); r.raise_for_status()
             doc=pymupdf.open(stream=r.content,filetype='pdf')
             for page_no in range(min(2,len(doc))):
-              page=doc[page_no]
-              for item in page.get_images(full=True):
+              for item in doc[page_no].get_images(full=True):
                 xref=item[0]
                 try:
                   info=doc.extract_image(xref); data=info['image']; ext=info.get('ext','png').lower()
                   im=Image.open(io.BytesIO(data)).convert('RGB'); w,h=im.size; ratio=w/max(h,1)
                   if w<320 or h<220 or ratio<0.55 or ratio>2.8: continue
-                  stat=ImageStat.Stat(im.resize((96,96))); variance=sum(stat.var)/3
+                  variance=sum(ImageStat.Stat(im.resize((96,96))).var)/3
                   if variance<120: continue
-                  # Product photo on manual cover is normally a JPEG. Prefer page 1 and photographic raster.
-                  format_bonus=2_000_000 if ext in ('jpeg','jpg','jpx') else 0
-                  page_bonus=4_000_000 if page_no==0 else 0
-                  newer_bonus=750_000 if pdf_index==0 else 0
-                  score=w*h + variance*500 + format_bonus + page_bonus + newer_bonus
-                  candidates.append((score,pdf_url,page_no,w,h,variance,ext,data,len(data)))
-                  print('candidate',pdf_index,page_no,f'{w}x{h}','variance',round(variance,1),'ext',ext,'bytes',len(data),'score',round(score,1))
+                  photographic=ext in ('jpeg','jpg','jpx')
+                  # QR codes / line graphics on covers are commonly high-variance PNGs.
+                  if not photographic and variance>9000: continue
+                  score=(10_000_000 if photographic else 0)+(4_000_000 if page_no==0 else 0)+(750_000 if pdf_index==0 else 0)+w*h+variance*250
+                  candidates.append((score,pdf_url,page_no,w,h,variance,ext,data,len(data),photographic))
+                  print('candidate',pdf_index,page_no,f'{w}x{h}','variance',round(variance,1),'ext',ext,'bytes',len(data),'photo',photographic,'score',round(score,1))
                 except Exception as e:
                   print('skip',pdf_index,page_no,xref,e)
           if not candidates: raise SystemExit('No suitable FKA2 product image found in official TROX manuals')
-          candidates.sort(key=lambda x:x[0],reverse=True)
-          score,pdf_url,page_no,w,h,variance,ext,data,size=candidates[0]
+          photos=[c for c in candidates if c[-1]]
+          pool=photos or candidates
+          pool.sort(key=lambda x:x[0],reverse=True)
+          score,pdf_url,page_no,w,h,variance,ext,data,size,photographic=pool[0]
           ext='jpg' if ext in ('jpeg','jpg','jpx') else 'png'
           out=Path('assets/images/trox-official')/f'fka2-eu.{ext}'
           for stale in Path('assets/images/trox-official').glob('fka2-eu.*'): stale.unlink()
           out.write_bytes(data)
           im=Image.open(out); vw,vh=im.size
-          if vw<320 or vh<220 or out.stat().st_size<5000: raise SystemExit('Extracted FKA2 image failed validation')
+          if vw<320 or vh<220 or out.stat().st_size<4500: raise SystemExit('Extracted FKA2 image failed validation')
           manifest_path=Path('assets/images/trox-official/fire-smoke-manifest.json')
           manifest=json.loads(manifest_path.read_text(encoding='utf-8')) if manifest_path.exists() else {}
-          manifest['fka2-eu']={'label':'FKA2-EU','file':str(out),'width':vw,'height':vh,'format':im.format,'source':pdf_url+f'#page={page_no+1}','score':'official-pdf-cover-extraction','bytes':out.stat().st_size}
+          manifest['fka2-eu']={'label':'FKA2-EU','file':str(out),'width':vw,'height':vh,'format':im.format,'source':pdf_url+f'#page={page_no+1}','score':'official-pdf-photographic-cover','bytes':out.stat().st_size}
           manifest_path.write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
           print('SELECTED',out,f'{vw}x{vh}',out.stat().st_size,'bytes',pdf_url,'page',page_no+1)
           PY
@@ -77,5 +77,5 @@ jobs:
           if [ -z "$(git status --porcelain -- assets/images/trox-official)" ]; then exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Replace FKA2 logo with official TROX product image'
+          git commit -m 'Use photographic official FKA2 product image'
           git push
