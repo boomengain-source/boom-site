@@ -1,0 +1,44 @@
+name: Fix unlabeled catalogue menu buttons
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-menu-button-labels.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add aria-label to legacy menu toggles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          old='<button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-nav">'
+          new='<button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-nav" aria-label="Открыть меню">'
+          changed=[]
+          for p in sorted(Path('.').glob('trox-*.html')):
+              text=p.read_text(encoding='utf-8')
+              if old in text:
+                  text=text.replace(old,new)
+                  p.write_text(text,encoding='utf-8')
+                  changed.append(str(p))
+          print('Updated',len(changed),'pages')
+          print('\n'.join(changed))
+          PY
+          if git diff --quiet -- 'trox-*.html'; then
+            echo 'No unlabeled menu toggles remain.'
+            exit 0
+          fi
+          git config user.name 'boomengain-source'
+          git config user.email 'boomeng.ain@gmail.com'
+          git add trox-*.html
+          git commit -m 'Label mobile menu buttons across TROX catalogue'
+          git pull --rebase origin main
+          git push origin HEAD:main
