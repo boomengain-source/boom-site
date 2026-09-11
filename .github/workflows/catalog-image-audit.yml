@@ -1,0 +1,97 @@
+name: Audit TROX catalogue product images
+
+on:
+  push:
+    paths:
+      - '.github/workflows/catalog-image-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image inspection dependency
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Audit all TROX HTML and runtime image mappings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          from PIL import Image
+
+          html_files=sorted(Path('.').glob('trox-*.html'))
+          errors=[]; warnings=[]; stats={'pages':len(html_files),'img_tags':0,'external':0,'synthetic':0,'missing':0,'local_raster':0}
+          external_rows=[]; synthetic_rows=[]; missing_rows=[]; raster_rows=[]
+
+          img_re=re.compile(r'<img\b[^>]*>',re.I)
+          src_re=re.compile(r'\bsrc=["\']([^"\']+)["\']',re.I)
+          alt_re=re.compile(r'\balt=["\']([^"\']*)["\']',re.I)
+          width_re=re.compile(r'\bwidth=["\'](\d+)["\']',re.I)
+          height_re=re.compile(r'\bheight=["\'](\d+)["\']',re.I)
+
+          for page in html_files:
+              text=page.read_text(encoding='utf-8',errors='ignore')
+              for tag in img_re.findall(text):
+                  stats['img_tags']+=1
+                  sm=src_re.search(tag)
+                  if not sm:
+                      errors.append(f'{page}: img without src'); continue
+                  src=sm.group(1); alt=(alt_re.search(tag).group(1) if alt_re.search(tag) else '')
+                  if src.startswith(('http://','https://','//')):
+                      stats['external']+=1; external_rows.append((str(page),src,alt))
+                      errors.append(f'{page}: external image: {src}')
+                      continue
+                  clean=src.split('?',1)[0].split('#',1)[0]
+                  if re.search(r'(?:-render|-product)\.svg$',clean,re.I) or '/placeholders/' in clean.lower():
+                      stats['synthetic']+=1; synthetic_rows.append((str(page),clean,alt))
+                      errors.append(f'{page}: synthetic/legacy product image: {clean}')
+                  asset=Path(clean)
+                  if not asset.exists():
+                      stats['missing']+=1; missing_rows.append((str(page),clean,alt))
+                      errors.append(f'{page}: missing local image: {clean}')
+                      continue
+                  if asset.suffix.lower() in {'.png','.jpg','.jpeg','.webp','.gif'}:
+                      stats['local_raster']+=1
+                      try:
+                          im=Image.open(asset); w,h=im.size
+                          declared_w=int(width_re.search(tag).group(1)) if width_re.search(tag) else None
+                          declared_h=int(height_re.search(tag).group(1)) if height_re.search(tag) else None
+                          raster_rows.append((str(page),clean,w,h,declared_w,declared_h,alt))
+                          if w < 400 or h < 220:
+                              warnings.append(f'{page}: small raster source {w}x{h}: {clean}')
+                          if declared_w and declared_w>w:
+                              errors.append(f'{page}: declared width upscales raster {declared_w}>{w}: {clean}')
+                          if declared_h and declared_h>h:
+                              errors.append(f'{page}: declared height upscales raster {declared_h}>{h}: {clean}')
+                      except Exception as e:
+                          errors.append(f'{page}: cannot inspect raster {clean}: {e}')
+
+          js=Path('script.js').read_text(encoding='utf-8',errors='ignore') if Path('script.js').exists() else ''
+          js_external=re.findall(r"\bimage\s*:\s*['\"](https?://[^'\"]+)",js,re.I)
+          for u in js_external:
+              errors.append(f'script.js: external product image mapping: {u}')
+
+          print('=== TROX IMAGE AUDIT ===')
+          print('pages:',stats['pages'],'img tags:',stats['img_tags'],'external:',stats['external'],'synthetic:',stats['synthetic'],'missing:',stats['missing'],'local raster:',stats['local_raster'])
+          print('\n=== EXTERNAL IMAGES ===')
+          for row in external_rows: print(' | '.join(row))
+          print('\n=== SYNTHETIC / LEGACY ===')
+          for row in synthetic_rows: print(' | '.join(row))
+          print('\n=== MISSING LOCAL ===')
+          for row in missing_rows: print(' | '.join(row))
+          print('\n=== LOCAL RASTER INVENTORY ===')
+          for page,src,w,h,dw,dh,alt in raster_rows: print(f'{page} | {src} | natural={w}x{h} | declared={dw}x{dh} | {alt}')
+          print('\n=== WARNINGS ===')
+          for x in warnings: print('WARN:',x)
+          print('\n=== ERRORS ===')
+          for x in errors: print('ERROR:',x)
+          print(f'\nRESULT: {len(errors)} errors, {len(warnings)} warnings')
+          if errors:
+              raise SystemExit(1)
+          PY
