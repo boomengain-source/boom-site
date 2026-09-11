@@ -40,10 +40,9 @@ jobs:
       - name: Run browser QA at desktop, laptop, tablet and mobile
         run: |
           mkdir -p qa-artifacts/screenshots
-          cat > /tmp/browser-qa.mjs <<'JS'
+          cat > browser-qa.mjs <<'JS'
           import { chromium } from 'playwright';
           import fs from 'fs';
-          import path from 'path';
 
           const root = process.cwd();
           const pages = fs.readdirSync(root)
@@ -121,7 +120,7 @@ jobs:
                   .filter(img => visible(img) && (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0))
                   .map(img => ({src:img.getAttribute('src'), alt:img.getAttribute('alt') || ''}));
                 const upscale = [...document.images]
-                  .filter(img => visible(img) && img.naturalWidth > 0)
+                  .filter(img => visible(img) && img.naturalWidth > 0 && !img.src.endsWith('.svg'))
                   .map(img => {
                     const r = img.getBoundingClientRect();
                     return {src:img.getAttribute('src'), naturalWidth:img.naturalWidth, renderedWidth:r.width, ratio:r.width ? img.naturalWidth/r.width : 999};
@@ -138,18 +137,18 @@ jobs:
                   .filter(visible)
                   .map(el => {
                     const r = el.getBoundingClientRect();
-                    return {tag:el.tagName, cls:el.className || '', left:r.left, right:r.right, width:r.width, text:(el.innerText || '').trim().slice(0,90)};
+                    return {tag:el.tagName, cls:String(el.className || ''), left:r.left, right:r.right, width:r.width, text:(el.innerText || '').trim().slice(0,90)};
                   })
                   .filter(x => x.left < -3 || x.right > innerWidth + 3);
                 const emptyProductMedia = [...document.querySelectorAll('.product-image,.fd-visual,.safe-visual,.ac-visual,.ahu-visual,.detail-image,.detail-photo,.detail-image-real,.visual')]
                   .filter(visible)
                   .filter(box => !box.querySelector('img') || ![...box.querySelectorAll('img')].some(img => img.complete && img.naturalWidth > 0))
-                  .map(box => ({cls:box.className || '', text:(box.innerText || '').trim().slice(0,80)}));
+                  .map(box => ({cls:String(box.className || ''), text:(box.innerText || '').trim().slice(0,80)}));
                 const hugeGaps = [...document.querySelectorAll('main section')]
                   .filter(visible)
                   .map(sec => {
                     const r = sec.getBoundingClientRect();
-                    return {cls:sec.className || '', height:r.height, childCount:sec.children.length};
+                    return {cls:String(sec.className || ''), height:r.height, childCount:sec.children.length};
                   })
                   .filter(x => x.height > 2200 && x.childCount <= 2);
                 return {
@@ -214,7 +213,7 @@ jobs:
           warnings.forEach(x => console.warn('WARN:', x));
           if (failures.length) process.exit(1);
           JS
-          node /tmp/browser-qa.mjs
+          node browser-qa.mjs
 
       - name: Upload QA report and screenshots
         if: always()
