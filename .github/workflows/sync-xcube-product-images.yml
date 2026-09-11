@@ -26,6 +26,7 @@ jobs:
           mkdir -p assets/images/trox-official
           python - <<'PY'
           import io
+          import json
           import re
           from pathlib import Path
           from urllib.parse import urljoin
@@ -38,24 +39,38 @@ jobs:
           HEADERS = {'User-Agent': UA, 'Referer': 'https://www.trox.de/'}
 
           products = [
-              ('x-cube', 'X-CUBE', 'https://www.trox.de/en/central-air-handling-units/x-cube-ec73b2b95937ad0a?format=html&slug=central-air-handling-units%2Fx-cube'),
-              ('x-cube-x2', 'X-CUBE X2', 'https://www.trox.de/en/central-air-handling-units/x-cube-x2-73ce35a32fb100ea'),
-              ('x-cube-x2-compact', 'X-CUBE X2 compact', 'https://www.trox.de/en/central-air-handling-units/x-cube-x2-compact-abef5413063f053f'),
-              ('x-cube-crofcu', 'X-CUBE CROFCU', 'https://www.trox.de/raumlufttechnische-geraete/x-cube-crofcu-4c9509c35c87a213'),
+              {
+                  'slug':'x-cube','label':'X-CUBE',
+                  'page':'https://www.trox.de/en/central-air-handling-units/x-cube-ec73b2b95937ad0a?format=html&slug=central-air-handling-units%2Fx-cube',
+                  'prefer':['x-cube_open','x-cube'], 'reject':['crofcu','compact']
+              },
+              {
+                  'slug':'x-cube-x2','label':'X-CUBE X2',
+                  'page':'https://www.trox.de/en/central-air-handling-units/x-cube-x2-73ce35a32fb100ea',
+                  'prefer':['gif_01_x-cube','x2','x-cube'], 'reject':['crofcu','compact']
+              },
+              {
+                  'slug':'x-cube-x2-compact','label':'X-CUBE X2 compact',
+                  'page':'https://www.trox.de/en/central-air-handling-units/x-cube-x2-compact-abef5413063f053f',
+                  'prefer':['compact','x2','x-cube'], 'reject':['crofcu']
+              },
+              {
+                  'slug':'x-cube-crofcu','label':'X-CUBE CROFCU',
+                  'page':'https://www.trox.de/raumlufttechnische-geraete/x-cube-crofcu-4c9509c35c87a213',
+                  'prefer':['crofcu'], 'reject':['compact']
+              },
           ]
 
           def norm(s):
               return re.sub(r'[^a-z0-9]+', '', (s or '').lower())
 
-          def candidate_urls(page_url, html, label):
+          def candidate_urls(page_url, html):
               soup = BeautifulSoup(html, 'html.parser')
               rows = []
-              og = soup.find('meta', attrs={'property':'og:image'})
-              if og and og.get('content'):
-                  rows.append((urljoin(page_url, og['content']), 'og:image', ''))
-              tw = soup.find('meta', attrs={'name':'twitter:image'})
-              if tw and tw.get('content'):
-                  rows.append((urljoin(page_url, tw['content']), 'twitter:image', ''))
+              for attrs in ({'property':'og:image'}, {'name':'twitter:image'}):
+                  m = soup.find('meta', attrs=attrs)
+                  if m and m.get('content'):
+                      rows.append((urljoin(page_url, m['content']), 'meta', ''))
               for img in soup.find_all('img'):
                   alt = ' '.join(filter(None, [img.get('alt'), img.get('title')]))
                   for attr in ('src','data-src','data-lazy-src','data-original'):
@@ -69,87 +84,84 @@ jobs:
                               u = part.strip().split(' ')[0]
                               if u:
                                   rows.append((urljoin(page_url, u), attr, alt))
-              # unique, preserve order
-              seen = set(); out = []
-              for r in rows:
-                  if r[0] not in seen:
-                      seen.add(r[0]); out.append(r)
+              seen=set(); out=[]
+              for row in rows:
+                  if row[0] not in seen:
+                      seen.add(row[0]); out.append(row)
               return out
 
-          def score(url, source, alt, label):
+          def score(url, source, alt, product):
               text = f'{url} {alt}'.lower()
-              s = 0
-              label_n = norm(label)
               text_n = norm(text)
-              if label_n and label_n in text_n:
-                  s += 180
-              for token in norm(label).replace('compact',' compact ').split():
-                  if token and token in text_n:
-                      s += 15
-              if 'x-cube' in text or 'xcube' in text_n:
-                  s += 90
-              if 'crofcu' in text_n:
-                  s += 70 if 'crofcu' in label_n else -20
-              if 'compact' in text_n:
-                  s += 70 if 'compact' in label_n else -15
-              if 'x2' in text_n:
-                  s += 45 if 'x2' in label_n else -10
+              s = 0
+              for i, token in enumerate(product['prefer']):
+                  if norm(token) in text_n:
+                      s += 220 - i*45
+              for token in product['reject']:
+                  if norm(token) in text_n:
+                      s -= 400
               if 'cdn.trox.de' in url or 'trox.de/__scrivito' in url:
-                  s += 55
-              if source in {'og:image','twitter:image'}:
+                  s += 70
+              if source == 'meta':
                   s += 25
               if any(k in text_n for k in ('product','introduction','marketing','hero','image','img')):
                   s += 20
               if any(k in text_n for k in ('placeholder','logo','icon','sprite','flag','social','avatar','arrow','playbutton')):
-                  s -= 250
+                  s -= 500
               return s
 
-          session = requests.Session()
-          session.headers.update(HEADERS)
+          session = requests.Session(); session.headers.update(HEADERS)
+          manifest = {}
 
-          for slug, label, page_url in products:
+          for product in products:
+              slug, label, page_url = product['slug'], product['label'], product['page']
               print(f'\n=== {label} ===')
-              page = session.get(page_url, timeout=45)
-              page.raise_for_status()
-              candidates = sorted(candidate_urls(page_url, page.text, label), key=lambda x: score(*x, label), reverse=True)
-              valid = []
-              for url, source, alt in candidates[:35]:
+              page = session.get(page_url, timeout=45); page.raise_for_status()
+              rows = sorted(candidate_urls(page_url, page.text), key=lambda x: score(*x, product), reverse=True)
+              valid=[]
+              for url, source, alt in rows[:60]:
                   try:
-                      r = session.get(url, timeout=45)
-                      if r.status_code != 200 or len(r.content) < 12000:
+                      r=session.get(url, timeout=45)
+                      if r.status_code != 200 or len(r.content) < 8000:
                           continue
-                      im = Image.open(io.BytesIO(r.content))
-                      im.load()
-                      w, h = im.size
+                      im=Image.open(io.BytesIO(r.content))
+                      w,h=im.size
                       if w < 600 or h < 260:
                           continue
-                      # reject obvious banners/sprites and extremely narrow/wide assets
-                      ratio = w / max(h, 1)
+                      ratio=w/max(h,1)
                       if ratio > 5.5 or ratio < 0.45:
                           continue
-                      valid.append((score(url, source, alt, label), w*h, w, h, url, im.copy()))
-                      print('candidate', score(url, source, alt, label), f'{w}x{h}', url)
-                  except Exception as e:
+                      sc=score(url,source,alt,product)
+                      valid.append((sc,w*h,w,h,url,r.content,im.format))
+                      print('candidate',sc,f'{w}x{h}',im.format,url)
+                  except Exception:
                       continue
               if not valid:
                   raise SystemExit(f'No valid product image found for {label}')
-              valid.sort(key=lambda x: (x[0], x[1]), reverse=True)
-              sc, area, w, h, url, im = valid[0]
-              # Keep transparent product renders where possible; normalize to PNG.
-              if im.mode not in ('RGB','RGBA'):
-                  im = im.convert('RGBA' if 'A' in im.getbands() else 'RGB')
-              out = Path('assets/images/trox-official') / f'{slug}.png'
-              im.save(out, format='PNG', optimize=True)
-              print('SELECTED', label, f'{w}x{h}', url, '=>', out, out.stat().st_size)
-              if out.stat().st_size < 15000:
-                  raise SystemExit(f'{out}: suspiciously small output')
+              valid.sort(key=lambda x:(x[0],x[1]), reverse=True)
+              sc,area,w,h,url,data,fmt=valid[0]
+              ext={'JPEG':'jpg','PNG':'png','GIF':'gif','WEBP':'webp'}.get((fmt or '').upper())
+              if not ext:
+                  raise SystemExit(f'Unsupported format {fmt} for {label}')
+              # remove stale variants for this slug so HTML can point to one canonical file
+              for stale in Path('assets/images/trox-official').glob(f'{slug}.*'):
+                  if stale.name != 'xcube-manifest.json':
+                      stale.unlink()
+              out=Path('assets/images/trox-official')/f'{slug}.{ext}'
+              out.write_bytes(data)
+              if out.stat().st_size < 8000:
+                  raise SystemExit(f'{out}: suspiciously small ({out.stat().st_size} bytes)')
+              manifest[slug]={'label':label,'file':str(out),'width':w,'height':h,'format':fmt,'source':url,'score':sc,'bytes':out.stat().st_size}
+              print('SELECTED',label,f'{w}x{h}',fmt,url,'=>',out,out.stat().st_size)
+
+          Path('assets/images/trox-official/xcube-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
           PY
 
       - name: Commit downloaded images
         shell: bash
         run: |
           set -euo pipefail
-          git add assets/images/trox-official
+          git add -A assets/images/trox-official
           if [ -z "$(git status --porcelain -- assets/images/trox-official)" ]; then
             echo 'No image changes.'
             exit 0
