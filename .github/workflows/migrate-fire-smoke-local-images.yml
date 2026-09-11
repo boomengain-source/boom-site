@@ -1,0 +1,140 @@
+name: Migrate fire and smoke pages to official local images
+
+on:
+  push:
+    paths:
+      - '.github/workflows/migrate-fire-smoke-local-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Switch category, detail pages and runtime map to local images
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, re
+          from pathlib import Path
+
+          manifest = json.loads(Path('assets/images/trox-official/fire-smoke-manifest.json').read_text(encoding='utf-8'))
+          required = ['fka2-eu','fk2-eu','fkr-eu','fkrs-eu','ka2-eu','ek-jz','ek2-eu','ek-js']
+          missing=[x for x in required if x not in manifest or not Path(manifest[x]['file']).exists()]
+          if missing:
+              raise SystemExit('Missing localized fire/smoke assets: '+', '.join(missing))
+
+          # Strong asset gates before touching HTML.
+          for slug in required:
+              m=manifest[slug]
+              w,h=int(m['width']),int(m['height'])
+              if w < 400 or h < 240:
+                  raise SystemExit(f'{slug}: source dimensions too small: {w}x{h}')
+              if int(m.get('bytes',0)) < 8000:
+                  raise SystemExit(f'{slug}: source file too small: {m.get("bytes")} bytes')
+              src=str(m.get('source',''))
+              if 'trox' not in src.lower():
+                  raise SystemExit(f'{slug}: source is not traceable to TROX: {src}')
+
+          models = {
+              'FKA2-EU':'fka2-eu','FK2-EU':'fk2-eu','FKR-EU':'fkr-eu','FKRS-EU':'fkrs-eu',
+              'KA2-EU':'ka2-eu','EK-JZ':'ek-jz','EK2-EU':'ek2-eu','EK-JS':'ek-js'
+          }
+          details = {
+              'FKA2-EU':'trox-fka2-eu.html','FK2-EU':'trox-fk2-eu.html','FKR-EU':'trox-fkr-eu.html',
+              'FKRS-EU':'trox-fkrs-eu.html','KA2-EU':'trox-ka2-eu.html','EK-JZ':'trox-ek-jz.html',
+              'EK2-EU':'trox-ek2-eu.html','EK-JS':'trox-ek-js.html'
+          }
+
+          def img_tag(model, slug, lazy=True):
+              m=manifest[slug]
+              attrs = ' loading="lazy"' if lazy else ''
+              alt_map={
+                  'FKA2-EU':'TROX FKA2-EU — противопожарный клапан',
+                  'FK2-EU':'TROX FK2-EU — противопожарный клапан',
+                  'FKR-EU':'TROX FKR-EU — круглый противопожарный клапан',
+                  'FKRS-EU':'TROX FKRS-EU — компактный круглый противопожарный клапан',
+                  'KA2-EU':'TROX KA2-EU — противопожарный клапан для кухонной вытяжки',
+                  'EK-JZ':'TROX EK-JZ — клапан дымоудаления',
+                  'EK2-EU':'TROX EK2-EU — дымовой клапан',
+                  'EK-JS':'TROX EK-JS — крупноформатный дымовой клапан',
+              }
+              return f'<img src="{m["file"]}" alt="{alt_map[model]}"{attrs} decoding="async" width="{m["width"]}" height="{m["height"]}">'
+
+          # Category: replace image inside each model card, preserve all copy/specs/actions.
+          p=Path('trox-fire-smoke-dampers.html'); text=p.read_text(encoding='utf-8')
+          text=text.replace('styles.css?v=20260911-2','styles.css?v=20260911-14').replace('script.js?v=20260911-2','script.js?v=20260911-14')
+          old_css='.fd-visual img{display:block;width:100%;height:100%;object-fit:contain;padding:18px;background:#fff}'
+          new_css='.fd-visual img{display:block;width:auto;height:auto;max-width:min(300px,100%);max-height:245px;object-fit:contain;background:#fff}'
+          if old_css not in text: raise SystemExit('Category image CSS fragment not found')
+          text=text.replace(old_css,new_css,1)
+          for model,slug in models.items():
+              pat=re.compile(r'(<article class="fd-card">.*?<h2>'+re.escape(model)+r'</h2>.*?</article>)',re.S)
+              mm=pat.search(text)
+              if not mm: raise SystemExit('Card not found: '+model)
+              article=mm.group(1)
+              replaced,n=re.subn(r'<img\b[^>]*>',img_tag(model,slug,True),article,count=1)
+              if n!=1: raise SystemExit('Image not replaced in card: '+model)
+              text=text[:mm.start(1)]+replaced+text[mm.end(1):]
+          p.write_text(text,encoding='utf-8')
+
+          # Detail pages: point main model image at the same localized asset and cap display size.
+          for model,filename in details.items():
+              slug=models[model]; p=Path(filename); text=p.read_text(encoding='utf-8')
+              text=re.sub(r'styles\.css\?v=[^"\']+','styles.css?v=20260911-14',text,count=1)
+              text=re.sub(r'script\.js\?v=[^"\']+','script.js?v=20260911-14',text,count=1)
+              # Replace the product image identified by its TROX/model alt. Works regardless of the previous external host.
+              pat=re.compile(r'<img\b[^>]*alt="TROX\s+'+re.escape(model)+r'[^\"]*"[^>]*>',re.I)
+              text,n=pat.subn(img_tag(model,slug,False),text,count=1)
+              if n!=1: raise SystemExit(f'{filename}: product image not found/replaced')
+              # Prevent raster upscaling. FKA2 is 412 px, so 300 px display still gives 1.37x density.
+              text=text.replace('.detail-photo img{width:100%;height:100%;object-fit:contain;padding:20px}',
+                                '.detail-photo img{display:block;width:auto;height:auto;max-width:min(300px,100%);max-height:285px;object-fit:contain}')
+              text=text.replace('.detail-image-real img{width:100%;height:100%;object-fit:contain;padding:22px}',
+                                '.detail-image-real img{display:block;width:auto;height:auto;max-width:min(300px,100%);max-height:285px;object-fit:contain}')
+              p.write_text(text,encoding='utf-8')
+
+          # Runtime metadata previously overwrote HTML with external image URLs. Make it same-origin too.
+          p=Path('script.js'); js=p.read_text(encoding='utf-8')
+          for model,slug in models.items():
+              local=manifest[slug]['file']
+              pat=re.compile(r"('"+re.escape(model)+r"'\s*:\s*\{image:)'[^']*'")
+              js,n=pat.subn(lambda m:m.group(1)+"'"+local+"'",js,count=1)
+              if n!=1: raise SystemExit('script.js image mapping not replaced: '+model)
+          p.write_text(js,encoding='utf-8')
+
+          # Acceptance gates for this cluster.
+          checked=['trox-fire-smoke-dampers.html',*details.values()]
+          for filename in checked:
+              t=Path(filename).read_text(encoding='utf-8')
+              product_imgs=re.findall(r'<img\b[^>]*src="([^"]+)"[^>]*alt="TROX\s+(?:FKA2-EU|FK2-EU|FKR-EU|FKRS-EU|KA2-EU|EK-JZ|EK2-EU|EK-JS)[^"]*"[^>]*>',t,re.I)
+              if not product_imgs: raise SystemExit(filename+': no product images found')
+              bad=[s for s in product_imgs if not s.startswith('assets/images/trox-official/')]
+              if bad: raise SystemExit(filename+': non-local product images remain: '+str(bad))
+              if '-product.svg' in t: raise SystemExit(filename+': legacy SVG product placeholder reference remains')
+
+          for model,slug in models.items():
+              local=manifest[slug]['file']
+              block=re.search(r"'"+re.escape(model)+r"'\s*:\s*\{image:'([^']+)'",js)
+              if not block or block.group(1)!=local:
+                  raise SystemExit('Runtime map failed acceptance for '+model)
+          print('Fire/smoke migration acceptance gates: PASS')
+          PY
+
+      - name: Commit migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A trox-fire-smoke-dampers.html trox-fka2-eu.html trox-fk2-eu.html trox-fkr-eu.html trox-fkrs-eu.html trox-ka2-eu.html trox-ek-jz.html trox-ek2-eu.html trox-ek-js.html script.js
+          if [ -z "$(git status --porcelain)" ]; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Use official local TROX images across fire and smoke pages'
+          git push
