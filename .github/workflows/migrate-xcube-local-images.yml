@@ -1,0 +1,110 @@
+name: Migrate X-CUBE pages to official local images
+
+on:
+  push:
+    paths:
+      - '.github/workflows/migrate-xcube-local-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Replace synthetic renders with official local TROX images
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+            'trox-air-handling-units.html': [
+              ('styles.css?v=20260911-12','styles.css?v=20260911-13'),
+              ('script.js?v=20260911-12','script.js?v=20260911-13'),
+              ('.ahu-visual img{display:block;width:100%;height:100%;object-fit:contain;padding:8px;background:#fff}',
+               '.ahu-visual img{display:block;width:auto;height:auto;max-width:min(480px,100%);max-height:255px;object-fit:contain;background:#fff}'),
+              ('<img src="assets/images/x-cube-render.svg" alt="TROX X-CUBE" loading="lazy" decoding="async" width="1200" height="700">',
+               '<img src="assets/images/trox-official/x-cube.jpg" alt="TROX X-CUBE — центральная климатическая установка" loading="lazy" decoding="async" width="730" height="376">'),
+              ('<img src="assets/images/x-cube-x2-render.svg" alt="TROX X-CUBE X2" loading="lazy" decoding="async" width="1200" height="700">',
+               '<img src="assets/images/trox-official/x-cube-x2.gif" alt="TROX X-CUBE X2 — модульная климатическая установка" loading="lazy" decoding="async" width="610" height="343">'),
+              ('<img src="assets/images/x-cube-x2-compact-render.svg" alt="TROX X-CUBE X2 compact" loading="lazy" decoding="async" width="1200" height="700">',
+               '<img src="assets/images/trox-official/x-cube-x2-compact.jpg" alt="TROX X-CUBE X2 compact — компактная ПВУ" loading="lazy" decoding="async" width="2126" height="2587">'),
+              ('<img src="assets/images/x-cube-crofcu-render.svg" alt="TROX X-CUBE CROFCU" loading="lazy" decoding="async" width="1200" height="700">',
+               '<img src="assets/images/trox-official/x-cube-crofcu.png" alt="TROX X-CUBE CROFCU — установка для чистых помещений" loading="lazy" decoding="async" width="800" height="612">'),
+            ],
+            'trox-x-cube.html': [
+              ('styles.css?v=20260911-12','styles.css?v=20260911-13'),('script.js?v=20260911-12','script.js?v=20260911-13'),
+              ('.detail-image img{width:100%;height:100%;object-fit:contain}',
+               '.detail-image{display:flex;align-items:center;justify-content:center;min-height:340px}.detail-image img{display:block;width:auto;height:auto;max-width:min(480px,100%);max-height:320px;object-fit:contain}'),
+              ('<img src="assets/images/x-cube-render.svg" alt="TROX X-CUBE" width="1200" height="700" decoding="async">',
+               '<img src="assets/images/trox-official/x-cube.jpg" alt="TROX X-CUBE — центральная климатическая установка" width="730" height="376" decoding="async">'),
+            ],
+            'trox-x-cube-x2.html': [
+              ('styles.css?v=20260911-12','styles.css?v=20260911-13'),('script.js?v=20260911-12','script.js?v=20260911-13'),
+              ('.detail-image img{width:100%;height:100%;object-fit:contain}',
+               '.detail-image{display:flex;align-items:center;justify-content:center;min-height:340px}.detail-image img{display:block;width:auto;height:auto;max-width:min(480px,100%);max-height:320px;object-fit:contain}'),
+              ('<img src="assets/images/x-cube-x2-render.svg" alt="TROX X-CUBE X2" width="1200" height="700" decoding="async">',
+               '<img src="assets/images/trox-official/x-cube-x2.gif" alt="TROX X-CUBE X2 — модульная климатическая установка" width="610" height="343" decoding="async">'),
+            ],
+            'trox-x-cube-x2-compact.html': [
+              ('styles.css?v=20260911-12','styles.css?v=20260911-13'),('script.js?v=20260911-12','script.js?v=20260911-13'),
+              ('.detail-image img{width:100%;height:100%;object-fit:contain}',
+               '.detail-image{display:flex;align-items:center;justify-content:center;min-height:340px}.detail-image img{display:block;width:auto;height:auto;max-width:min(480px,100%);max-height:360px;object-fit:contain}'),
+              ('<img src="assets/images/x-cube-x2-compact-render.svg" alt="TROX X-CUBE X2 compact" width="1200" height="700" decoding="async">',
+               '<img src="assets/images/trox-official/x-cube-x2-compact.jpg" alt="TROX X-CUBE X2 compact — компактная ПВУ" width="2126" height="2587" decoding="async">'),
+            ],
+            'trox-x-cube-crofcu.html': [
+              ('styles.css?v=20260911-12','styles.css?v=20260911-13'),('script.js?v=20260911-12','script.js?v=20260911-13'),
+              ('.detail-image img{width:100%;height:100%;object-fit:contain}',
+               '.detail-image{display:flex;align-items:center;justify-content:center;min-height:340px}.detail-image img{display:block;width:auto;height:auto;max-width:min(480px,100%);max-height:320px;object-fit:contain}'),
+              ('<img src="assets/images/x-cube-crofcu-render.svg" alt="TROX X-CUBE CROFCU" width="1200" height="700" decoding="async">',
+               '<img src="assets/images/trox-official/x-cube-crofcu.png" alt="TROX X-CUBE CROFCU — установка для чистых помещений" width="800" height="612" decoding="async">'),
+            ],
+          }
+
+          for filename, changes in replacements.items():
+              p=Path(filename); text=p.read_text(encoding='utf-8'); original=text
+              for old,new in changes:
+                  if old not in text:
+                      raise SystemExit(f'{filename}: expected fragment not found: {old[:90]}')
+                  text=text.replace(old,new,1)
+              p.write_text(text,encoding='utf-8')
+              print(filename, 'updated', len(original), '->', len(text))
+
+          for old in [
+              'assets/images/x-cube-render.svg',
+              'assets/images/x-cube-x2-render.svg',
+              'assets/images/x-cube-x2-compact-render.svg',
+              'assets/images/x-cube-crofcu-render.svg',
+          ]:
+              p=Path(old)
+              if p.exists():
+                  p.unlink(); print('deleted',old)
+
+          # Hard fail if a synthetic X-CUBE render reference survives anywhere in HTML.
+          offenders=[]
+          for p in Path('.').glob('*.html'):
+              t=p.read_text(encoding='utf-8',errors='ignore')
+              if 'x-cube-render.svg' in t or 'x-cube-x2-render.svg' in t or 'x-cube-x2-compact-render.svg' in t or 'x-cube-crofcu-render.svg' in t:
+                  offenders.append(str(p))
+          if offenders:
+              raise SystemExit('Synthetic X-CUBE render references remain: '+', '.join(offenders))
+          PY
+
+      - name: Commit migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          if [ -z "$(git status --porcelain)" ]; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Use official local TROX images across X-CUBE pages'
+          git push
