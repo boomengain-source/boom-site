@@ -2,12 +2,12 @@
   "fka2-eu": {
     "label": "FKA2-EU",
     "file": "assets/images/trox-official/fka2-eu.png",
-    "width": 1124,
-    "height": 292,
+    "width": 545,
+    "height": 545,
     "format": "PNG",
-    "source": "https://cdn.trox.de/32fd9966ca0a4774/d5641071eee2/v/6fc03e5feb78/TROX_Logo_with_claim_blue_1124px.png?nowebp=1",
-    "score": -520,
-    "bytes": 24140
+    "source": "https://cdn.trox.de/162474459a77055f/b74a510f6b2d/FKA2-EU_SV_IOM_A00000092721-GB_V1_2022_08_GB_en.pdf#page=1",
+    "score": "official-pdf-cover-extraction",
+    "bytes": 9542
   },
   "fk2-eu": {
     "label": "FK2-EU",
