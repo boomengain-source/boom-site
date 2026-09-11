@@ -1,0 +1,77 @@
+name: Inspect official X-CUBE brochure product images
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-xcube-pdf-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image/PDF tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils
+          python -m pip install --disable-pip-version-check pillow
+      - name: Download official TROX brochures and extract embedded images
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p xcube-inspect/x2 xcube-inspect/compact xcube-inspect/out
+          curl -fL --retry 3 'https://cdn.trox.de/408c51c934e638ad/7aa96fe0a61d/SB_2019_06_X-CubeX2_DE_en_web.pdf' -o xcube-inspect/x2.pdf
+          curl -fL --retry 3 'https://cdn.trox.de/d8c06db243badc2e/28e6b0d34e11/SB_2024_01_XCUBE_compact_EN_web.pdf' -o xcube-inspect/compact.pdf
+          pdfimages -list xcube-inspect/x2.pdf > xcube-inspect/out/x2-list.txt
+          pdfimages -list xcube-inspect/compact.pdf > xcube-inspect/out/compact-list.txt
+          pdfimages -all xcube-inspect/x2.pdf xcube-inspect/x2/img
+          pdfimages -all xcube-inspect/compact.pdf xcube-inspect/compact/img
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image,ImageOps,ImageDraw,ImageFont
+
+          def inspect(folder,label):
+              rows=[]
+              for p in sorted(Path(folder).glob('img-*')):
+                  try:
+                      im=Image.open(p).convert('RGB')
+                      w,h=im.size
+                  except Exception:
+                      continue
+                  if w < 300 or h < 180:
+                      continue
+                  ratio=w/h
+                  # Drop obvious page-width decorative strips but retain product photos.
+                  if ratio > 8 or ratio < .12:
+                      continue
+                  rows.append((p,w,h,im))
+              cards=[]
+              for p,w,h,im in rows:
+                  thumb=ImageOps.contain(im,(360,240))
+                  card=Image.new('RGB',(390,290),'white')
+                  card.paste(thumb,((390-thumb.width)//2,8))
+                  d=ImageDraw.Draw(card)
+                  d.rectangle((0,0,389,289),outline='#cccccc')
+                  d.text((8,252),f'{p.name}  {w}x{h}',fill='black')
+                  cards.append(card)
+              cols=3
+              rowsn=max(1,(len(cards)+cols-1)//cols)
+              sheet=Image.new('RGB',(cols*390,rowsn*290),'white')
+              for i,c in enumerate(cards): sheet.paste(c,((i%cols)*390,(i//cols)*290))
+              out=Path('xcube-inspect/out')/f'{label}-contact.jpg'
+              sheet.save(out,quality=92)
+              (Path('xcube-inspect/out')/f'{label}-candidates.txt').write_text('\n'.join(f'{p.name}\t{w}x{h}' for p,w,h,_ in rows),encoding='utf-8')
+              print(label,'candidates',len(cards))
+          inspect('xcube-inspect/x2','x2')
+          inspect('xcube-inspect/compact','compact')
+          PY
+      - name: Upload inspection sheets
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcube-official-image-inspection-${{ github.sha }}
+          path: xcube-inspect/out/
+          retention-days: 7
