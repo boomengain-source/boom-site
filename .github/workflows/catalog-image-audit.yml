@@ -124,4 +124,4 @@ jobs:
               raise SystemExit(1)
           PY
 
-# audit rerun after repository-wide localization
+# audit rerun after 1.50x density normalization
