@@ -1,0 +1,123 @@
+name: Audit TROX catalogue structure and links
+
+on:
+  push:
+    paths:
+      - '.github/workflows/catalog-structure-audit.yml'
+      - 'trox-*.html'
+      - 'index.html'
+      - 'styles.css'
+      - 'script.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install parser
+        run: python -m pip install --disable-pip-version-check beautifulsoup4
+      - name: Validate HTML structure and internal navigation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlsplit, unquote
+          from bs4 import BeautifulSoup
+          import re
+
+          pages = sorted(Path('.').glob('trox-*.html'))
+          errors=[]
+          warnings=[]
+          parsed={}
+
+          def soup_for(path):
+              path=Path(path)
+              if path not in parsed:
+                  parsed[path]=BeautifulSoup(path.read_text(encoding='utf-8',errors='ignore'),'html.parser')
+              return parsed[path]
+
+          all_html={p.name:p for p in Path('.').glob('*.html')}
+          checked_links=0
+          checked_assets=0
+
+          for page in pages:
+              soup=soup_for(page)
+              title=soup.title.get_text(' ',strip=True) if soup.title else ''
+              desc=soup.find('meta',attrs={'name':re.compile('^description$',re.I)})
+              desc_content=(desc.get('content') or '').strip() if desc else ''
+              h1s=soup.find_all('h1')
+              ids=[x.get('id') for x in soup.find_all(attrs={'id':True})]
+              dup_ids=sorted({x for x in ids if ids.count(x)>1})
+
+              if not title:
+                  errors.append(f'{page}: missing <title>')
+              elif len(title)<15:
+                  warnings.append(f'{page}: unusually short title ({len(title)} chars): {title}')
+              if not desc_content:
+                  errors.append(f'{page}: missing meta description')
+              elif len(desc_content)<70:
+                  warnings.append(f'{page}: short meta description ({len(desc_content)} chars)')
+              if len(h1s)!=1:
+                  errors.append(f'{page}: H1 count={len(h1s)}')
+              elif not h1s[0].get_text(' ',strip=True):
+                  errors.append(f'{page}: empty H1')
+              if dup_ids:
+                  errors.append(f'{page}: duplicate IDs: {dup_ids}')
+
+              for tag,attr in [('a','href'),('link','href'),('script','src')]:
+                  for node in soup.find_all(tag):
+                      raw=(node.get(attr) or '').strip()
+                      if not raw or raw.startswith(('mailto:','tel:','javascript:','data:')):
+                          continue
+                      u=urlsplit(raw)
+                      if u.scheme in ('http','https') or raw.startswith('//'):
+                          continue
+                      target_path=unquote(u.path)
+                      fragment=unquote(u.fragment)
+                      if tag=='a': checked_links+=1
+                      else: checked_assets+=1
+
+                      if target_path:
+                          target=(page.parent/target_path).resolve()
+                          try:
+                              target.relative_to(Path('.').resolve())
+                          except ValueError:
+                              errors.append(f'{page}: local reference escapes repository: {raw}')
+                              continue
+                          if not target.exists():
+                              errors.append(f'{page}: missing local target: {raw}')
+                              continue
+                      else:
+                          target=page.resolve()
+
+                      if tag=='a' and fragment:
+                          if target.suffix.lower()=='.html':
+                              ts=soup_for(target)
+                              anchor=ts.find(id=fragment) or ts.find(attrs={'name':fragment})
+                              if not anchor:
+                                  errors.append(f'{page}: missing anchor in {target.name}: #{fragment}')
+
+              # Basic accessibility / semantics on actionable controls.
+              for img in soup.find_all('img'):
+                  if img.get('alt') is None:
+                      errors.append(f'{page}: img without alt attribute: {img.get("src","")}')
+              for button in soup.find_all('button'):
+                  if not button.get_text(' ',strip=True) and not button.get('aria-label'):
+                      errors.append(f'{page}: unlabeled button')
+
+          print('=== TROX STRUCTURE AUDIT ===')
+          print('Pages:',len(pages))
+          print('Internal link references checked:',checked_links)
+          print('Local stylesheet/script references checked:',checked_assets)
+          print('Errors:',len(errors))
+          print('Warnings:',len(warnings))
+          for x in errors: print('ERROR:',x)
+          for x in warnings: print('WARN:',x)
+          if errors:
+              raise SystemExit(1)
+          PY
