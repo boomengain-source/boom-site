@@ -1,0 +1,52 @@
+name: Apply responsive QA fixes
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-responsive-qa-fixes.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Append responsive hardening overrides
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker='/* QA responsive hardening 2026-09-11 */'
+          if grep -Fq "$marker" styles.css; then
+            echo 'Responsive hardening already present.'
+            exit 0
+          fi
+          cat >> styles.css <<'CSS'
+
+/* QA responsive hardening 2026-09-11 */
+@media(max-width:1500px){
+  .container{width:min(calc(100% - 50px),var(--container))}
+  .nav-inner{gap:25px}
+  .logo{min-width:220px}
+  .main-nav{gap:22px}
+  .main-nav a{font-size:16px}
+  .header-cta{min-width:235px}
+  .product-image{height:240px}
+}
+@media(max-width:650px){
+  h1,h2,h3,.lead,.project-cta p,.hub-models,.button{overflow-wrap:anywhere;word-break:normal}
+  .hub-grid{grid-template-columns:minmax(0,1fr)!important;min-width:0;max-width:100%}
+  .hub-card,.product-card,.cat-card,.fd-card,.safe-card,.ac-card,.ahu-card,.ad-card,.med-card{min-width:0;max-width:100%}
+  .hub-card h2,.hub-card p,.hub-models{min-width:0;max-width:100%}
+  .project-cta h2{max-width:100%;overflow-wrap:anywhere}
+  .cta-inner>div,.cta-actions{min-width:0;max-width:100%}
+  .button{max-width:100%;white-space:normal;text-align:center;padding-left:18px;padding-right:18px}
+}
+CSS
+          git config user.name 'boomengain-source'
+          git config user.email 'boomeng.ain@gmail.com'
+          git add styles.css
+          git commit -m 'Harden responsive layout at laptop and mobile widths'
+          git push
