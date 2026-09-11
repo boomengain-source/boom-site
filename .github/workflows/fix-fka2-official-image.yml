@@ -16,53 +16,58 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install PDF/image tools
         run: python -m pip install --disable-pip-version-check requests pymupdf pillow
-      - name: Extract cover product image from official TROX manual
+      - name: Extract cover product image from official TROX manuals
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           import io, json
           from pathlib import Path
-          import requests, fitz
+          import requests, pymupdf
           from PIL import Image, ImageStat
 
-          pdf_url='https://cdn.trox.de/162474459a77055f/b74a510f6b2d/FKA2-EU_SV_IOM_A00000092721-GB_V1_2022_08_GB_en.pdf'
-          r=requests.get(pdf_url,timeout=60,headers={'User-Agent':'Mozilla/5.0'}); r.raise_for_status()
-          doc=fitz.open(stream=r.content,filetype='pdf')
+          pdf_urls=[
+            'https://cdn.trox.de/de5eab239df89b88/a662b6d31fb2/FKA2-EU_IOM_A00000092719-GB_V1_2023_08_GB_en.pdf',
+            'https://cdn.trox.de/162474459a77055f/b74a510f6b2d/FKA2-EU_SV_IOM_A00000092721-GB_V1_2022_08_GB_en.pdf',
+          ]
+          session=requests.Session(); session.headers.update({'User-Agent':'Mozilla/5.0'})
           candidates=[]
-          for page_no in range(min(3,len(doc))):
-            page=doc[page_no]
-            for item in page.get_images(full=True):
-              xref=item[0]
-              try:
-                info=doc.extract_image(xref); data=info['image']; ext=info.get('ext','png')
-                im=Image.open(io.BytesIO(data)).convert('RGB'); w,h=im.size
-                ratio=w/max(h,1)
-                if w<260 or h<180 or ratio<0.45 or ratio>3.2: continue
-                stat=ImageStat.Stat(im.resize((96,96)))
-                variance=sum(stat.var)/3
-                # product photos/renders have visual structure; logos/blank masks generally do not
-                if variance<120: continue
-                score=(0 if page_no==0 else -500) + w*h + variance*1500
-                candidates.append((score,page_no,w,h,variance,ext,data))
-                print('candidate',page_no,f'{w}x{h}','variance',round(variance,1),'ext',ext,'score',round(score,1))
-              except Exception as e:
-                print('skip',page_no,xref,e)
-          if not candidates: raise SystemExit('No suitable FKA2 product image found in official TROX PDF')
+          for pdf_index,pdf_url in enumerate(pdf_urls):
+            r=session.get(pdf_url,timeout=90); r.raise_for_status()
+            doc=pymupdf.open(stream=r.content,filetype='pdf')
+            for page_no in range(min(2,len(doc))):
+              page=doc[page_no]
+              for item in page.get_images(full=True):
+                xref=item[0]
+                try:
+                  info=doc.extract_image(xref); data=info['image']; ext=info.get('ext','png').lower()
+                  im=Image.open(io.BytesIO(data)).convert('RGB'); w,h=im.size; ratio=w/max(h,1)
+                  if w<320 or h<220 or ratio<0.55 or ratio>2.8: continue
+                  stat=ImageStat.Stat(im.resize((96,96))); variance=sum(stat.var)/3
+                  if variance<120: continue
+                  # Product photo on manual cover is normally a JPEG. Prefer page 1 and photographic raster.
+                  format_bonus=2_000_000 if ext in ('jpeg','jpg','jpx') else 0
+                  page_bonus=4_000_000 if page_no==0 else 0
+                  newer_bonus=750_000 if pdf_index==0 else 0
+                  score=w*h + variance*500 + format_bonus + page_bonus + newer_bonus
+                  candidates.append((score,pdf_url,page_no,w,h,variance,ext,data,len(data)))
+                  print('candidate',pdf_index,page_no,f'{w}x{h}','variance',round(variance,1),'ext',ext,'bytes',len(data),'score',round(score,1))
+                except Exception as e:
+                  print('skip',pdf_index,page_no,xref,e)
+          if not candidates: raise SystemExit('No suitable FKA2 product image found in official TROX manuals')
           candidates.sort(key=lambda x:x[0],reverse=True)
-          score,page_no,w,h,variance,ext,data=candidates[0]
-          ext='jpg' if ext.lower() in ('jpeg','jpg','jpx') else 'png'
+          score,pdf_url,page_no,w,h,variance,ext,data,size=candidates[0]
+          ext='jpg' if ext in ('jpeg','jpg','jpx') else 'png'
           out=Path('assets/images/trox-official')/f'fka2-eu.{ext}'
           for stale in Path('assets/images/trox-official').glob('fka2-eu.*'): stale.unlink()
           out.write_bytes(data)
-          # Validate extracted file
           im=Image.open(out); vw,vh=im.size
-          if vw<260 or vh<180 or out.stat().st_size<12000: raise SystemExit('Extracted FKA2 image failed validation')
+          if vw<320 or vh<220 or out.stat().st_size<5000: raise SystemExit('Extracted FKA2 image failed validation')
           manifest_path=Path('assets/images/trox-official/fire-smoke-manifest.json')
           manifest=json.loads(manifest_path.read_text(encoding='utf-8')) if manifest_path.exists() else {}
-          manifest['fka2-eu']={'label':'FKA2-EU','file':str(out),'width':vw,'height':vh,'format':im.format,'source':pdf_url+'#page=1','score':'official-pdf-cover-extraction','bytes':out.stat().st_size}
+          manifest['fka2-eu']={'label':'FKA2-EU','file':str(out),'width':vw,'height':vh,'format':im.format,'source':pdf_url+f'#page={page_no+1}','score':'official-pdf-cover-extraction','bytes':out.stat().st_size}
           manifest_path.write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
-          print('SELECTED',out,f'{vw}x{vh}',out.stat().st_size,'bytes from page',page_no+1)
+          print('SELECTED',out,f'{vw}x{vh}',out.stat().st_size,'bytes',pdf_url,'page',page_no+1)
           PY
       - name: Commit corrected image
         shell: bash
