@@ -68,21 +68,29 @@ jobs:
               }
               return f'<img src="{m["file"]}" alt="{alt_map[model]}"{attrs} decoding="async" width="{m["width"]}" height="{m["height"]}">'
 
-          # Category: replace image inside each model card, preserve all copy/specs/actions.
+          # Category: process each article independently so one model can never overwrite a neighbour's image.
           p=Path('trox-fire-smoke-dampers.html'); text=p.read_text(encoding='utf-8')
-          text=text.replace('styles.css?v=20260911-2','styles.css?v=20260911-14').replace('script.js?v=20260911-2','script.js?v=20260911-14')
+          text=re.sub(r'styles\.css\?v=[^"\']+','styles.css?v=20260911-14',text,count=1)
+          text=re.sub(r'script\.js\?v=[^"\']+','script.js?v=20260911-14',text,count=1)
           old_css='.fd-visual img{display:block;width:100%;height:100%;object-fit:contain;padding:18px;background:#fff}'
           new_css='.fd-visual img{display:block;width:auto;height:auto;max-width:min(300px,100%);max-height:245px;object-fit:contain;background:#fff}'
           if old_css not in text: raise SystemExit('Category image CSS fragment not found')
           text=text.replace(old_css,new_css,1)
-          for model,slug in models.items():
-              pat=re.compile(r'(<article class="fd-card">.*?<h2>'+re.escape(model)+r'</h2>.*?</article>)',re.S)
-              mm=pat.search(text)
-              if not mm: raise SystemExit('Card not found: '+model)
-              article=mm.group(1)
-              replaced,n=re.subn(r'<img\b[^>]*>',img_tag(model,slug,True),article,count=1)
+          seen=set()
+          article_pattern=re.compile(r'<article class="fd-card">.*?</article>',re.S)
+          def replace_article(match):
+              article=match.group(0)
+              h=re.search(r'<h2>([^<]+)</h2>',article)
+              if not h: return article
+              model=h.group(1).strip()
+              if model not in models: return article
+              replaced,n=re.subn(r'<img\b[^>]*>',img_tag(model,models[model],True),article,count=1)
               if n!=1: raise SystemExit('Image not replaced in card: '+model)
-              text=text[:mm.start(1)]+replaced+text[mm.end(1):]
+              seen.add(model)
+              return replaced
+          text=article_pattern.sub(replace_article,text)
+          if seen != set(models):
+              raise SystemExit('Not all category cards migrated. Missing: '+', '.join(sorted(set(models)-seen)))
           p.write_text(text,encoding='utf-8')
 
           # Detail pages: point main model image at the same localized asset and cap display size.
@@ -90,11 +98,9 @@ jobs:
               slug=models[model]; p=Path(filename); text=p.read_text(encoding='utf-8')
               text=re.sub(r'styles\.css\?v=[^"\']+','styles.css?v=20260911-14',text,count=1)
               text=re.sub(r'script\.js\?v=[^"\']+','script.js?v=20260911-14',text,count=1)
-              # Replace the product image identified by its TROX/model alt. Works regardless of the previous external host.
               pat=re.compile(r'<img\b[^>]*alt="TROX\s+'+re.escape(model)+r'[^\"]*"[^>]*>',re.I)
               text,n=pat.subn(img_tag(model,slug,False),text,count=1)
               if n!=1: raise SystemExit(f'{filename}: product image not found/replaced')
-              # Prevent raster upscaling. FKA2 is 412 px, so 300 px display still gives 1.37x density.
               text=text.replace('.detail-photo img{width:100%;height:100%;object-fit:contain;padding:20px}',
                                 '.detail-photo img{display:block;width:auto;height:auto;max-width:min(300px,100%);max-height:285px;object-fit:contain}')
               text=text.replace('.detail-image-real img{width:100%;height:100%;object-fit:contain;padding:22px}',
