@@ -94,14 +94,22 @@ jobs:
               let gotoError = null;
               try {
                 await p.goto(url, {waitUntil:'domcontentloaded', timeout:20000});
-                await p.waitForTimeout(250);
+                await p.evaluate(() => {
+                  document.querySelectorAll('img').forEach(img => { img.loading = 'eager'; });
+                });
+                await p.waitForTimeout(120);
                 await p.evaluate(async () => {
                   const imgs = [...document.images];
-                  await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => {
-                    img.addEventListener('load', r, {once:true});
-                    img.addEventListener('error', r, {once:true});
-                    setTimeout(r, 3000);
-                  })));
+                  await Promise.all(imgs.map(img => {
+                    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                    return new Promise(r => {
+                      const done = () => r();
+                      img.addEventListener('load', done, {once:true});
+                      img.addEventListener('error', done, {once:true});
+                      setTimeout(done, 4000);
+                    });
+                  }));
+                  await Promise.all(imgs.map(img => img.decode ? img.decode().catch(() => {}) : Promise.resolve()));
                   if (document.fonts?.ready) await document.fonts.ready;
                 });
               } catch (e) {
@@ -131,7 +139,7 @@ jobs:
                 const criticalSelectors = [
                   'h1','h2','.lead','.breadcrumbs','.product-card','.hub-card','.fd-card','.safe-card','.ac-card','.ahu-card',
                   '.detail-layout','.tech-table','.product-grid','.hub-grid','.fd-grid','.safe-grid','.ac-grid','.ahu-grid',
-                  '.cta-inner','.main-nav','.site-header'
+                  '.cta-inner','.main-nav','.site-header','.nav-inner','.contact-inner','.header-cta','.logo'
                 ].join(',');
                 const offscreen = [...document.querySelectorAll(criticalSelectors)]
                   .filter(visible)
@@ -140,17 +148,14 @@ jobs:
                     return {tag:el.tagName, cls:String(el.className || ''), left:r.left, right:r.right, width:r.width, text:(el.innerText || '').trim().slice(0,90)};
                   })
                   .filter(x => x.left < -3 || x.right > innerWidth + 3);
-                const emptyProductMedia = [...document.querySelectorAll('.product-image,.fd-visual,.safe-visual,.ac-visual,.ahu-visual,.detail-image,.detail-photo,.detail-image-real,.visual')]
+                const emptyProductMedia = [...document.querySelectorAll('.product-image,.fd-visual,.safe-visual,.ac-visual,.ahu-visual,.detail-image,.detail-photo,.detail-image-real,.visual,.cat-visual,.ad-visual')]
                   .filter(visible)
                   .filter(box => !box.querySelector('img') || ![...box.querySelectorAll('img')].some(img => img.complete && img.naturalWidth > 0))
                   .map(box => ({cls:String(box.className || ''), text:(box.innerText || '').trim().slice(0,80)}));
-                const hugeGaps = [...document.querySelectorAll('main section')]
+                const textOverflow = [...document.querySelectorAll('h1,h2,h3,.button,.hub-models')]
                   .filter(visible)
-                  .map(sec => {
-                    const r = sec.getBoundingClientRect();
-                    return {cls:String(sec.className || ''), height:r.height, childCount:sec.children.length};
-                  })
-                  .filter(x => x.height > 2200 && x.childCount <= 2);
+                  .filter(el => el.scrollWidth > el.clientWidth + 3)
+                  .map(el => ({tag:el.tagName, cls:String(el.className || ''), clientWidth:el.clientWidth, scrollWidth:el.scrollWidth, text:(el.innerText || '').trim().slice(0,100)}));
                 return {
                   title:document.title,
                   h1s,
@@ -159,7 +164,7 @@ jobs:
                   horizontalOverflow,
                   offscreen,
                   emptyProductMedia,
-                  hugeGaps,
+                  textOverflow,
                   bodyHeight:body.scrollHeight,
                 };
               });
@@ -172,7 +177,7 @@ jobs:
               if (result.emptyProductMedia.length) errs.push(`empty product media=${JSON.stringify(result.emptyProductMedia)}`);
               if (result.horizontalOverflow > 3) errs.push(`horizontal overflow=${result.horizontalOverflow}px`);
               if (result.offscreen.length) errs.push(`offscreen critical elements=${JSON.stringify(result.offscreen.slice(0,8))}`);
-              if (result.hugeGaps.length) errs.push(`suspicious huge sections=${JSON.stringify(result.hugeGaps)}`);
+              if (result.textOverflow.length) errs.push(`text overflow=${JSON.stringify(result.textOverflow.slice(0,8))}`);
               if (pageErrors.length) errs.push(`page errors=${JSON.stringify(pageErrors)}`);
               if (consoleErrors.length) warnings.push(`${key}: console errors=${JSON.stringify(consoleErrors.slice(0,5))}`);
               if (result.upscale.length) warnings.push(`${key}: image density below 1.45x=${JSON.stringify(result.upscale.slice(0,8))}`);
@@ -181,7 +186,7 @@ jobs:
               if (errs.length) failures.push(`${key}: ${errs.join(' | ')}`);
               matrix.push({file, viewport:vp.name, width:vp.width, height:vp.height, ...result, errors:errs});
 
-              if (screenshotPages.has(file) && (vp.name === 'desktop' || vp.name === 'mobile')) {
+              if (screenshotPages.has(file) && (vp.name === 'desktop' || vp.name === 'laptop' || vp.name === 'mobile')) {
                 const safe = file.replace('.html','');
                 await p.screenshot({path:`qa-artifacts/screenshots/${safe}-${vp.name}.png`, fullPage:true});
               }
