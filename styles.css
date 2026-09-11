@@ -47,3 +47,23 @@
 
 /* TROX_OFFICIAL_MEDIA_GUARD */
 img.trox-official-media{display:block!important;width:auto!important;height:auto!important;max-width:min(var(--trox-media-max,440px),100%)!important;max-height:360px!important;object-fit:contain!important;margin-left:auto!important;margin-right:auto!important}
+
+/* QA responsive hardening 2026-09-11 */
+@media(max-width:1500px){
+  .container{width:min(calc(100% - 50px),var(--container))}
+  .nav-inner{gap:25px}
+  .logo{min-width:220px}
+  .main-nav{gap:22px}
+  .main-nav a{font-size:16px}
+  .header-cta{min-width:235px}
+  .product-image{height:240px}
+}
+@media(max-width:650px){
+  h1,h2,h3,.lead,.project-cta p,.hub-models,.button{overflow-wrap:anywhere;word-break:normal}
+  .hub-grid{grid-template-columns:minmax(0,1fr)!important;min-width:0;max-width:100%}
+  .hub-card,.product-card,.cat-card,.fd-card,.safe-card,.ac-card,.ahu-card,.ad-card,.med-card{min-width:0;max-width:100%}
+  .hub-card h2,.hub-card p,.hub-models{min-width:0;max-width:100%}
+  .project-cta h2{max-width:100%;overflow-wrap:anywhere}
+  .cta-inner>div,.cta-actions{min-width:0;max-width:100%}
+  .button{max-width:100%;white-space:normal;text-align:center;padding-left:18px;padding-right:18px}
+}
