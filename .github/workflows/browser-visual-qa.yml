@@ -1,0 +1,226 @@
+name: Browser visual QA — TROX catalogue
+
+on:
+  push:
+    paths:
+      - '.github/workflows/browser-visual-qa.yml'
+      - 'trox-*.html'
+      - 'styles.css'
+      - 'script.js'
+      - 'assets/images/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --save-dev playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start local static server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/boom-http.log 2>&1 &
+          echo $! > /tmp/boom-http.pid
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4173/trox-catalog.html >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/boom-http.log
+          exit 1
+
+      - name: Run browser QA at desktop, laptop, tablet and mobile
+        run: |
+          mkdir -p qa-artifacts/screenshots
+          cat > /tmp/browser-qa.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import path from 'path';
+
+          const root = process.cwd();
+          const pages = fs.readdirSync(root)
+            .filter(f => /^trox-.*\.html$/i.test(f))
+            .sort();
+
+          const viewports = [
+            {name:'desktop', width:1920, height:1080},
+            {name:'laptop', width:1366, height:768},
+            {name:'tablet', width:768, height:1024},
+            {name:'mobile', width:390, height:844},
+          ];
+
+          const screenshotPages = new Set([
+            'trox-catalog.html',
+            'trox-fire-smoke-dampers.html',
+            'trox-vav.html',
+            'trox-air-diffusers.html',
+            'trox-cav-air-distribution.html',
+            'trox-cleanrooms.html',
+            'trox-bibo-safe-change.html',
+            'trox-sound-attenuators.html',
+            'trox-pressure-labcontrol.html',
+            'trox-healthcare-operating-rooms.html',
+            'trox-air-handling-units.html',
+            'trox-industry-solutions.html',
+          ]);
+
+          const failures = [];
+          const warnings = [];
+          const matrix = [];
+          const browser = await chromium.launch({headless:true});
+
+          for (const vp of viewports) {
+            const context = await browser.newContext({
+              viewport: {width:vp.width, height:vp.height},
+              deviceScaleFactor: 1,
+              locale: 'ru-RU',
+            });
+
+            for (const file of pages) {
+              const p = await context.newPage();
+              const consoleErrors = [];
+              const pageErrors = [];
+              p.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+              p.on('pageerror', e => pageErrors.push(String(e)));
+
+              const url = `http://127.0.0.1:4173/${file}?browserqa=1`;
+              let gotoError = null;
+              try {
+                await p.goto(url, {waitUntil:'domcontentloaded', timeout:20000});
+                await p.waitForTimeout(250);
+                await p.evaluate(async () => {
+                  const imgs = [...document.images];
+                  await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => {
+                    img.addEventListener('load', r, {once:true});
+                    img.addEventListener('error', r, {once:true});
+                    setTimeout(r, 3000);
+                  })));
+                  if (document.fonts?.ready) await document.fonts.ready;
+                });
+              } catch (e) {
+                gotoError = String(e);
+              }
+
+              const result = await p.evaluate(() => {
+                const visible = el => {
+                  const s = getComputedStyle(el);
+                  const r = el.getBoundingClientRect();
+                  return s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity || '1') > 0 && r.width > 0 && r.height > 0;
+                };
+                const body = document.body;
+                const de = document.documentElement;
+                const brokenImages = [...document.images]
+                  .filter(img => visible(img) && (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0))
+                  .map(img => ({src:img.getAttribute('src'), alt:img.getAttribute('alt') || ''}));
+                const upscale = [...document.images]
+                  .filter(img => visible(img) && img.naturalWidth > 0)
+                  .map(img => {
+                    const r = img.getBoundingClientRect();
+                    return {src:img.getAttribute('src'), naturalWidth:img.naturalWidth, renderedWidth:r.width, ratio:r.width ? img.naturalWidth/r.width : 999};
+                  })
+                  .filter(x => x.ratio < 1.45);
+                const h1s = [...document.querySelectorAll('h1')].filter(visible).map(x => x.innerText.trim());
+                const horizontalOverflow = de.scrollWidth - de.clientWidth;
+                const criticalSelectors = [
+                  'h1','h2','.lead','.breadcrumbs','.product-card','.hub-card','.fd-card','.safe-card','.ac-card','.ahu-card',
+                  '.detail-layout','.tech-table','.product-grid','.hub-grid','.fd-grid','.safe-grid','.ac-grid','.ahu-grid',
+                  '.cta-inner','.main-nav','.site-header'
+                ].join(',');
+                const offscreen = [...document.querySelectorAll(criticalSelectors)]
+                  .filter(visible)
+                  .map(el => {
+                    const r = el.getBoundingClientRect();
+                    return {tag:el.tagName, cls:el.className || '', left:r.left, right:r.right, width:r.width, text:(el.innerText || '').trim().slice(0,90)};
+                  })
+                  .filter(x => x.left < -3 || x.right > innerWidth + 3);
+                const emptyProductMedia = [...document.querySelectorAll('.product-image,.fd-visual,.safe-visual,.ac-visual,.ahu-visual,.detail-image,.detail-photo,.detail-image-real,.visual')]
+                  .filter(visible)
+                  .filter(box => !box.querySelector('img') || ![...box.querySelectorAll('img')].some(img => img.complete && img.naturalWidth > 0))
+                  .map(box => ({cls:box.className || '', text:(box.innerText || '').trim().slice(0,80)}));
+                const hugeGaps = [...document.querySelectorAll('main section')]
+                  .filter(visible)
+                  .map(sec => {
+                    const r = sec.getBoundingClientRect();
+                    return {cls:sec.className || '', height:r.height, childCount:sec.children.length};
+                  })
+                  .filter(x => x.height > 2200 && x.childCount <= 2);
+                return {
+                  title:document.title,
+                  h1s,
+                  brokenImages,
+                  upscale,
+                  horizontalOverflow,
+                  offscreen,
+                  emptyProductMedia,
+                  hugeGaps,
+                  bodyHeight:body.scrollHeight,
+                };
+              });
+
+              const key = `${file} @ ${vp.name} ${vp.width}x${vp.height}`;
+              const errs = [];
+              if (gotoError) errs.push(`navigation: ${gotoError}`);
+              if (result.h1s.length !== 1) errs.push(`visible H1 count=${result.h1s.length}`);
+              if (result.brokenImages.length) errs.push(`broken images=${JSON.stringify(result.brokenImages)}`);
+              if (result.emptyProductMedia.length) errs.push(`empty product media=${JSON.stringify(result.emptyProductMedia)}`);
+              if (result.horizontalOverflow > 3) errs.push(`horizontal overflow=${result.horizontalOverflow}px`);
+              if (result.offscreen.length) errs.push(`offscreen critical elements=${JSON.stringify(result.offscreen.slice(0,8))}`);
+              if (result.hugeGaps.length) errs.push(`suspicious huge sections=${JSON.stringify(result.hugeGaps)}`);
+              if (pageErrors.length) errs.push(`page errors=${JSON.stringify(pageErrors)}`);
+              if (consoleErrors.length) warnings.push(`${key}: console errors=${JSON.stringify(consoleErrors.slice(0,5))}`);
+              if (result.upscale.length) warnings.push(`${key}: image density below 1.45x=${JSON.stringify(result.upscale.slice(0,8))}`);
+              if (result.bodyHeight < 400) errs.push(`implausibly short page height=${result.bodyHeight}`);
+
+              if (errs.length) failures.push(`${key}: ${errs.join(' | ')}`);
+              matrix.push({file, viewport:vp.name, width:vp.width, height:vp.height, ...result, errors:errs});
+
+              if (screenshotPages.has(file) && (vp.name === 'desktop' || vp.name === 'mobile')) {
+                const safe = file.replace('.html','');
+                await p.screenshot({path:`qa-artifacts/screenshots/${safe}-${vp.name}.png`, fullPage:true});
+              }
+              await p.close();
+            }
+            await context.close();
+          }
+
+          await browser.close();
+          fs.writeFileSync('qa-artifacts/browser-qa.json', JSON.stringify({pages:pages.length, viewports, failures, warnings, matrix}, null, 2));
+          fs.writeFileSync('qa-artifacts/browser-qa.txt', [
+            `Pages: ${pages.length}`,
+            `Viewport passes: ${pages.length * viewports.length}`,
+            `Failures: ${failures.length}`,
+            `Warnings: ${warnings.length}`,
+            '',
+            'FAILURES',
+            ...(failures.length ? failures : ['NONE']),
+            '',
+            'WARNINGS',
+            ...(warnings.length ? warnings : ['NONE']),
+          ].join('\n'));
+
+          console.log(`Pages: ${pages.length}`);
+          console.log(`Viewport passes: ${pages.length * viewports.length}`);
+          console.log(`Failures: ${failures.length}`);
+          console.log(`Warnings: ${warnings.length}`);
+          failures.forEach(x => console.error('FAIL:', x));
+          warnings.forEach(x => console.warn('WARN:', x));
+          if (failures.length) process.exit(1);
+          JS
+          node /tmp/browser-qa.mjs
+
+      - name: Upload QA report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trox-browser-qa-${{ github.sha }}
+          path: qa-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
