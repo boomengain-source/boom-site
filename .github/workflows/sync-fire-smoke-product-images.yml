@@ -1,0 +1,118 @@
+name: Sync official TROX fire and smoke product images
+
+on:
+  push:
+    paths:
+      - '.github/workflows/sync-fire-smoke-product-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4 pillow
+      - name: Download and validate official product images
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/images/trox-official
+          python - <<'PY'
+          import io, json, re
+          from pathlib import Path
+          from urllib.parse import urljoin
+          import requests
+          from bs4 import BeautifulSoup
+          from PIL import Image
+
+          products = [
+            {'slug':'fka2-eu','label':'FKA2-EU','page':'https://www.trox.de/en/fka2-eu-d4d8a977788c4dee','prefer':['fka2-eu','fka2'],'reject':['fk2-eu','fkr','fkrs','ka2-eu']},
+            {'slug':'fk2-eu','label':'FK2-EU','page':'https://www.trox.de/en/fire-dampers/fk2-eu-6a7ebbadc72c1037','prefer':['fk2-eu','fk2'],'reject':['fka2','fkr','fkrs','ka2']},
+            {'slug':'fkr-eu','label':'FKR-EU','page':'https://www.trox.de/en/fire-dampers/fkr-eu-69c6216a6d944cc9','prefer':['fkr-eu','fkr'],'reject':['fkrs','fk2','fka2']},
+            {'slug':'fkrs-eu','label':'FKRS-EU','page':'https://www.trox.de/en/fire-dampers/fkrs-eu-e44c04db778f79a6','prefer':['fkrs-eu','fkrs'],'reject':['fkr-eu','fk2','fka2']},
+            {'slug':'ka2-eu','label':'KA2-EU','page':'https://www.trox.de/en/fire-dampers/ka2-eu-1ac28fd4d1bb18a5','prefer':['ka2-eu','ka2'],'reject':['fka2','fk2']},
+            {'slug':'ek-jz','label':'EK-JZ','page':'https://www.trox.de/en/smoke-control-damper/ek-jz-605db13990db172d','prefer':['ek-jz','ek_jz','ekjz'],'reject':['ek2','ek-js','ek_js']},
+            {'slug':'ek2-eu','label':'EK2-EU','page':'https://www.trox.de/en/smoke-control-damper/ek2-eu-3d057b1570acb468','prefer':['ek2-eu','ek2'],'reject':['ek-jz','ek-js']},
+            {'slug':'ek-js','label':'EK-JS','page':'https://www.trox.de/en/smoke-control-damper/ek-js-fbd700e6e81da044','prefer':['ek-js','ek_js','ekjs'],'reject':['ek-jz','ek2']},
+          ]
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
+          session=requests.Session(); session.headers.update({'User-Agent':UA,'Referer':'https://www.trox.de/'})
+
+          def norm(s): return re.sub(r'[^a-z0-9]+','',(s or '').lower())
+          def rows(page_url,html):
+            soup=BeautifulSoup(html,'html.parser'); out=[]
+            for attrs in ({'property':'og:image'},{'name':'twitter:image'}):
+              m=soup.find('meta',attrs=attrs)
+              if m and m.get('content'): out.append((urljoin(page_url,m['content']),'meta',''))
+            for img in soup.find_all('img'):
+              alt=' '.join(filter(None,[img.get('alt'),img.get('title')]))
+              for a in ('src','data-src','data-lazy-src','data-original'):
+                v=img.get(a)
+                if v: out.append((urljoin(page_url,v),a,alt))
+              for a in ('srcset','data-srcset'):
+                v=img.get(a)
+                if v:
+                  for part in v.split(','):
+                    u=part.strip().split(' ')[0]
+                    if u: out.append((urljoin(page_url,u),a,alt))
+            seen=set(); unique=[]
+            for row in out:
+              if row[0] not in seen: seen.add(row[0]); unique.append(row)
+            return unique
+          def score(url,source,alt,p):
+            t=norm(url+' '+alt); s=0
+            for i,k in enumerate(p['prefer']):
+              if norm(k) in t: s += 300-i*60
+            for k in p['reject']:
+              if norm(k) in t: s -= 500
+            if 'cdn.trox.de' in url or 'trox.de/__scrivito' in url: s+=80
+            if source=='meta': s+=20
+            if any(k in t for k in ('product','introduction','marketing','image','img','render')): s+=25
+            if any(k in t for k in ('placeholder','logo','icon','sprite','flag','social','avatar','arrow','playbutton')): s-=600
+            return s
+
+          manifest={}
+          for p in products:
+            print('\n===',p['label'],'===')
+            resp=session.get(p['page'],timeout=45); resp.raise_for_status()
+            cand=sorted(rows(p['page'],resp.text),key=lambda x:score(*x,p),reverse=True)
+            valid=[]
+            for url,source,alt in cand[:70]:
+              try:
+                r=session.get(url,timeout=45)
+                if r.status_code!=200 or len(r.content)<8000: continue
+                im=Image.open(io.BytesIO(r.content)); w,h=im.size
+                if w<450 or h<240: continue
+                ratio=w/max(h,1)
+                if ratio>5.5 or ratio<0.4: continue
+                sc=score(url,source,alt,p)
+                valid.append((sc,w*h,w,h,url,r.content,im.format))
+                print('candidate',sc,f'{w}x{h}',im.format,url)
+              except Exception: pass
+            if not valid: raise SystemExit('No valid official image for '+p['label'])
+            valid.sort(key=lambda x:(x[0],x[1]),reverse=True)
+            sc,area,w,h,url,data,fmt=valid[0]
+            ext={'JPEG':'jpg','PNG':'png','GIF':'gif','WEBP':'webp'}.get((fmt or '').upper())
+            if not ext: raise SystemExit('Unsupported format '+str(fmt))
+            for stale in Path('assets/images/trox-official').glob(p['slug']+'.*'):
+              stale.unlink()
+            out=Path('assets/images/trox-official')/(p['slug']+'.'+ext); out.write_bytes(data)
+            if out.stat().st_size<8000: raise SystemExit(f'{out}: suspiciously small')
+            manifest[p['slug']]={'label':p['label'],'file':str(out),'width':w,'height':h,'format':fmt,'source':url,'score':sc,'bytes':out.stat().st_size}
+            print('SELECTED',p['label'],f'{w}x{h}',fmt,url,'=>',out)
+          Path('assets/images/trox-official/fire-smoke-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+          PY
+      - name: Commit images
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A assets/images/trox-official
+          if [ -z "$(git status --porcelain -- assets/images/trox-official)" ]; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Localize official TROX fire and smoke product images'
+          git push
