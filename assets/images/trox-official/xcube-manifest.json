@@ -1,0 +1,42 @@
+{
+  "x-cube": {
+    "label": "X-CUBE",
+    "file": "assets/images/trox-official/x-cube.jpg",
+    "width": 730,
+    "height": 376,
+    "format": "JPEG",
+    "source": "https://cdn.trox.de/d7194b4b28c742be/ab03a1015e9f/x-cube_open.jpg",
+    "score": 490,
+    "bytes": 183493
+  },
+  "x-cube-x2": {
+    "label": "X-CUBE X2",
+    "file": "assets/images/trox-official/x-cube-x2.gif",
+    "width": 610,
+    "height": 343,
+    "format": "GIF",
+    "source": "https://cdn.trox.de/476e594d7fde598c/94eb1fe3cacd/GIF_01_X-Cube.gif",
+    "score": 595,
+    "bytes": 6516793
+  },
+  "x-cube-x2-compact": {
+    "label": "X-CUBE X2 compact",
+    "file": "assets/images/trox-official/x-cube-x2-compact.jpg",
+    "width": 2126,
+    "height": 2587,
+    "format": "JPEG",
+    "source": "https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiIwN2E5ZDUwMGRhOTk1ZmZlLzNlMmNjM2M0YmIyZi9YLUNVQkVfWDJfY29tcGFjdF9lbmdsaXNoLmpwZyIsIm9ial9pZCI6IjA3YTlkNTAwZGE5OTVmZmUiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7fX0%3D--a508a34515a1b7b3a798c86490ed48b876894c68",
+    "score": 70,
+    "bytes": 378779
+  },
+  "x-cube-crofcu": {
+    "label": "X-CUBE CROFCU",
+    "file": "assets/images/trox-official/x-cube-crofcu.png",
+    "width": 800,
+    "height": 612,
+    "format": "PNG",
+    "source": "https://cdn.trox.de/public/5d8ebab63f39495f/077768ec8c6ca462418310fd04165c7e/crofcu.png",
+    "score": 315,
+    "bytes": 569232
+  }
+}
