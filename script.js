@@ -45,7 +45,7 @@ if (menuToggle && mainNav) {
 
 const headerLogo = document.querySelector('.site-header .logo img');
 if (headerLogo) {
-  headerLogo.src = 'https://boom-eng.ru/wp-content/themes/boom-theme/assets/images/logo.png';
+  headerLogo.src = 'assets/images/boom-engineering-logo.svg';
   headerLogo.alt = 'BOOM Engineering';
   headerLogo.style.width = '197px';
   headerLogo.style.height = '63px';
@@ -77,14 +77,14 @@ window.addEventListener('hashchange', applyModelSeo);
 applyModelSeo();
 
 const troxProducts = {
-  'FKA2-EU': {image:'https://cdn.trox.de/536376718a7bff22/0378ea32f310/FK2-EU_img_09psd.psd.link',page:'https://www.trox.de/en/fka2-eu-d4d8a977788c4dee',datasheet:'https://cdn.trox.de/c4ea1008aa81ec70/575b601e6cd7/FKA2-EU_PD_2024_10_17_DE_en.pdf',dop:'https://cdn.trox.de/c1ccd758d98922d6/cded09c658d9/FKA2-EU_DoP_2025_05_DE_en.pdf',manual:'https://cdn.trox.de/c10c837c244cef45/59b164fe1e90/FKA2-EU_IOM_A00000092719_V1_2023_07_GB_en.pdf'},
-  'FK2-EU': {image:'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiI1YmQxMGE4MTkwODk1MjQxLzY2N2JmOGViZTc4Ny9GSzItRVVfaW1nXzkwcG5nLnBuZyIsIm9ial9pZCI6IjViZDEwYTgxOTA4OTUyNDEiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--0d8bf7564b2159403caeecff8e29d5aa46ba774b',page:'https://www.trox.de/en/fire-dampers/fk2-eu-6a7ebbadc72c1037',datasheet:'https://cdn.trox.de/4242a202e284570e/8e0ae5b65f4c/b04a033ad76a0aa177591b08f2c95745.pdf'},
-  'FKR-EU': {image:'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiI1ZDJiNjYzYjIzMzI2YjczLzAxZGJhM2VhMGU4Yi9Qcm9kdWt0YmlsZC1GS1ItRVUucG5nIiwib2JqX2lkIjoiNWQyYjY2M2IyMzMyNmI3MyIsInRyYW5zZm9ybWF0aW9uX2RlZmluaXRpb24iOnsid2lkdGgiOjYwMH19--1ae50209b59fad817c52161f10f4581f82fa8af4',page:'https://www.trox.de/en/fire-dampers/fkr-eu-69c6216a6d944cc9'},
-  'FKRS-EU': {image:'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJhMjg1Yzg1N2QzYWFkNWM0LzE0NjAyYzA5YjRmZi9GS1JTLUVVLWludHJvZHVjdGlvbi1pbWFnZS5wbmciLCJvYmpfaWQiOiJhMjg1Yzg1N2QzYWFkNWM0IiwidHJhbnNmb3JtYXRpb25fZGVmaW5pdGlvbiI6eyJ3aWR0aCI6NjAwfX0%3D--c07842ea4cc97398d77e2ba176757116a81a439b',page:'https://www.trox.de/en/fire-dampers/fkrs-eu-e44c04db778f79a6',datasheet:'https://cdn.trox.de/3a5b36ea741ff75f/59aef46c5a34/FKRS-EU_PD_2025_10_28_DE_en.pdf',manual:'https://cdn.trox.de/e040598b677afae7/f21a95a75149/FKRS-EU_IOM_A00000092709_V4.1_2025_11_GB_en.pdf'},
-  'KA2-EU': {image:'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJjN2Q5ODkyZWMyMzlkMTE2L2U4OWIwZTAzOTUxNC9TY3JlZW5zaG90LTIwMjUtMDUtMDYtMTQwMTU2LnBuZyIsIm9ial9pZCI6ImM3ZDk4OTJlYzIzOWQxMTYiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--b88e6101d3b7a627b01f45ad5abafdaaa77f525e',page:'https://www.trox.de/en/fire-dampers/ka2-eu-1ac28fd4d1bb18a5',downloadsPage:'https://www.trox.de/brandschutzklappen/ka2-eu-6a3320d221576495#downloads',datasheet:'https://cdn.trox.de/a21cd7187374574a/6820aa7817a4/KA2-EU_PD_2025_05_08_DE_en.pdf',manual:'https://cdn.trox.de/60370b283e9255e4/c7e11ec7bd73/KA2-EU_IOM_CD10090_V1_2025_05_GB_en.pdf'},
-  'EK-JZ': {image:'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiIzNTQ1NjkxMjAzYjkwODEzL2ZlOGM2ZjBhYjFlZS9FSy1KWl9pbWdfMTlwc2QucG5nIiwib2JqX2lkIjoiMzU0NTY5MTIwM2I5MDgxMyIsInRyYW5zZm9ybWF0aW9uX2RlZmluaXRpb24iOnsid2lkdGgiOjYwMH19--33d95c9f30f26119fb08e9b08113990a473d2643',page:'https://www.trox.de/en/smoke-control-damper/ek-jz-605db13990db172d'},
-  'EK2-EU': {image:'https://cdn.trox.de/77999b79b47c76d4/04512dfd7970/v/1a733c7f6065/EK2-EU-introduction-image-english.png',page:'https://www.trox.de/en/smoke-control-damper/ek2-eu-3d057b1570acb468',manual:'https://cdn.trox.de/76560e599d9357ce/f2fe2002c4ce/EK2-EU_IOM_A00000085080_V3_2026_05_GB_en.pdf'},
-  'EK-JS': {image:'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJjNGVhYzJlZmRiMjAxYzFlL2JiNzgwMzAzMDdlMi9FSy1KU19pbWdfMDFwc2QucG5nIiwib2JqX2lkIjoiYzRlYWMyZWZkYjIwMWMxZSIsInRyYW5zZm9ybWF0aW9uX2RlZmluaXRpb24iOnsid2lkdGgiOjYwMH19--7d9b45f724ea956776de3893a861d27b73daf63c',page:'https://www.trox.de/en/smoke-control-damper/ek-js-fbd700e6e81da044',datasheet:'https://cdn.trox.de/898ccb2f86912107/8ff73cb109a4/EK-JS_PD_2024_03_15_DE_en.pdf'}
+  'FKA2-EU': {image:'https://img.interempresas.net/fotos/2081242.png',page:'https://www.trox.de/en/fka2-eu-d4d8a977788c4dee',datasheet:'https://cdn.trox.de/c4ea1008aa81ec70/575b601e6cd7/FKA2-EU_PD_2024_10_17_DE_en.pdf',dop:'https://cdn.trox.de/c1ccd758d98922d6/cded09c658d9/FKA2-EU_DoP_2025_05_DE_en.pdf',manual:'https://cdn.trox.de/c10c837c244cef45/59b164fe1e90/FKA2-EU_IOM_A00000092719_V1_2023_07_GB_en.pdf'},
+  'FK2-EU': {image:'https://cdn.trox.de/5359873840046cf5/e361f6e6be32/v/9f8c2cfcfd8c/FK2-EU_img_72psd.png',page:'https://www.trox.de/en/fire-dampers/fk2-eu-6a7ebbadc72c1037',datasheet:'https://cdn.trox.de/4242a202e284570e/8e0ae5b65f4c/b04a033ad76a0aa177591b08f2c95745.pdf'},
+  'FKR-EU': {image:'https://cdn.trox.de/556f7ee016a29832/4b22bfb39390/Download.png',page:'https://www.trox.de/en/fire-dampers/fkr-eu-69c6216a6d944cc9'},
+  'FKRS-EU': {image:'https://cdn0.scrvt.com/trox/7d9bfe6320842a93/a45a8a6d5210/00136610_0.png',page:'https://www.trox.de/en/fire-dampers/fkrs-eu-e44c04db778f79a6',datasheet:'https://cdn.trox.de/3a5b36ea741ff75f/59aef46c5a34/FKRS-EU_PD_2025_10_28_DE_en.pdf',manual:'https://cdn.trox.de/e040598b677afae7/f21a95a75149/FKRS-EU_IOM_A00000092709_V4.1_2025_11_GB_en.pdf'},
+  'KA2-EU': {image:'https://cdn.nextproducts.at/m20/45/43576545/images/47/48533947px479x400.jpg',page:'https://www.trox.de/en/fire-dampers/ka2-eu-1ac28fd4d1bb18a5',downloadsPage:'https://www.trox.de/brandschutzklappen/ka2-eu-6a3320d221576495#downloads',datasheet:'https://cdn.trox.de/a21cd7187374574a/6820aa7817a4/KA2-EU_PD_2025_05_08_DE_en.pdf',manual:'https://cdn.trox.de/60370b283e9255e4/c7e11ec7bd73/KA2-EU_IOM_CD10090_V1_2025_05_GB_en.pdf'},
+  'EK-JZ': {image:'https://cdn.trox.de/ad22c6a96acf5489/02f26742e982/v/6a68c285923f/EK_JZ.jpg?nowebp=1',page:'https://www.trox.de/en/smoke-control-damper/ek-jz-605db13990db172d'},
+  'EK2-EU': {image:'https://cdn.trox.de/cd8f135b693a118b/ca7e3dcf6e06/EK2-EU_PL.png',page:'https://www.trox.de/en/smoke-control-damper/ek2-eu-3d057b1570acb468',manual:'https://cdn.trox.de/76560e599d9357ce/f2fe2002c4ce/EK2-EU_IOM_A00000085080_V3_2026_05_GB_en.pdf'},
+  'EK-JS': {image:'https://www.tab.de/imgs/1/7/8/7/6/8/5/0395a6ba7883346d.jpg',page:'https://www.trox.de/en/smoke-control-damper/ek-js-fbd700e6e81da044',datasheet:'https://cdn.trox.de/898ccb2f86912107/8ff73cb109a4/EK-JS_PD_2024_03_15_DE_en.pdf'}
 };
 
 const verifiedSpecs = {
@@ -120,9 +120,8 @@ function applyOfficialTroxMedia(container, headingSelector) {
   if (!product) return;
   const image = container.querySelector('.product-image img, .detail-image img');
   if (image) {
-    const localFallback = image.getAttribute('src');
     image.referrerPolicy = 'no-referrer'; image.src = product.image; image.alt = `TROX ${model} — изображение изделия`; image.loading = 'lazy'; image.style.objectFit = 'contain'; image.style.background = '#fff';
-    image.onerror = () => { image.onerror = null; image.src = localFallback; };
+    image.onerror = () => { image.onerror = null; image.removeAttribute('src'); image.classList.add('image-unavailable'); image.alt = `Изображение TROX ${model} временно недоступно`; };
   }
   const downloadsPage = product.downloadsPage || `${product.page}#downloads`;
   const datasheetLink = product.datasheet || downloadsPage;
