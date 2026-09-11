@@ -70,6 +70,8 @@ jobs:
             'trox-cleanrooms.html',
             'trox-bibo-safe-change.html',
             'trox-sound-attenuators.html',
+            'trox-healthcare-operating-rooms.html',
+            'trox-procondif-pcd.html',
           ];
           const viewports = [
             {name:'desktop', width:1920, height:1080},
