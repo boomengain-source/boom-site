@@ -24,6 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p qa-structure
           python3 - <<'PY'
           from pathlib import Path
           from urllib.parse import urlsplit, unquote
@@ -41,7 +42,6 @@ jobs:
                   parsed[path]=BeautifulSoup(path.read_text(encoding='utf-8',errors='ignore'),'html.parser')
               return parsed[path]
 
-          all_html={p.name:p for p in Path('.').glob('*.html')}
           checked_links=0
           checked_assets=0
 
@@ -95,14 +95,12 @@ jobs:
                       else:
                           target=page.resolve()
 
-                      if tag=='a' and fragment:
-                          if target.suffix.lower()=='.html':
-                              ts=soup_for(target)
-                              anchor=ts.find(id=fragment) or ts.find(attrs={'name':fragment})
-                              if not anchor:
-                                  errors.append(f'{page}: missing anchor in {target.name}: #{fragment}')
+                      if tag=='a' and fragment and target.suffix.lower()=='.html':
+                          ts=soup_for(target)
+                          anchor=ts.find(id=fragment) or ts.find(attrs={'name':fragment})
+                          if not anchor:
+                              errors.append(f'{page}: missing anchor in {target.name}: #{fragment}')
 
-              # Basic accessibility / semantics on actionable controls.
               for img in soup.find_all('img'):
                   if img.get('alt') is None:
                       errors.append(f'{page}: img without alt attribute: {img.get("src","")}')
@@ -110,14 +108,31 @@ jobs:
                   if not button.get_text(' ',strip=True) and not button.get('aria-label'):
                       errors.append(f'{page}: unlabeled button')
 
-          print('=== TROX STRUCTURE AUDIT ===')
-          print('Pages:',len(pages))
-          print('Internal link references checked:',checked_links)
-          print('Local stylesheet/script references checked:',checked_assets)
-          print('Errors:',len(errors))
-          print('Warnings:',len(warnings))
-          for x in errors: print('ERROR:',x)
-          for x in warnings: print('WARN:',x)
+          report=[
+              '=== TROX STRUCTURE AUDIT ===',
+              f'Pages: {len(pages)}',
+              f'Internal link references checked: {checked_links}',
+              f'Local stylesheet/script references checked: {checked_assets}',
+              f'Errors: {len(errors)}',
+              f'Warnings: {len(warnings)}',
+              '',
+              'ERRORS',
+              *(errors or ['NONE']),
+              '',
+              'WARNINGS',
+              *(warnings or ['NONE']),
+          ]
+          text='\n'.join(report)+'\n'
+          Path('qa-structure/structure-audit.txt').write_text(text,encoding='utf-8')
+          print(text)
           if errors:
               raise SystemExit(1)
           PY
+      - name: Upload structural QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trox-structure-audit-${{ github.sha }}
+          path: qa-structure/
+          if-no-files-found: error
+          retention-days: 14
