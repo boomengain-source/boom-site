@@ -1,4 +1,4 @@
-name: Fix PROCONDIF PCD official product image
+name: Fix PROCONDIF PCD cleanroom image
 
 on:
   push:
@@ -10,102 +10,99 @@ permissions:
   contents: write
 
 jobs:
-  extract:
+  replace:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: Install PDF/image tools
-        run: python -m pip install --disable-pip-version-check requests pymupdf pillow
-      - name: Extract a high-resolution official TROX PROCONDIF image and update pages
+      - name: Install image dependency
+        run: python -m pip install --disable-pip-version-check requests pillow beautifulsoup4
+      - name: Download and validate high-resolution cleanroom photograph
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import io, re
           from pathlib import Path
-          import requests, pymupdf
+          import io, re
+          import requests
           from PIL import Image, ImageStat
 
-          sources=[
-            ('product-info','https://www.trox.de/en/downloads/3d599bf0d121fee4/L04119e.pdf?type=product_info'),
-            ('reference-photos','https://cdn.trox.de/public/427268ba9f228812/ba0b5d2e2401178ee8d204985a43f69c/procondif-typ-pcd-referenzfotos.pdf'),
-          ]
-          session=requests.Session(); session.headers.update({'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-          candidates=[]
-          for source_index,(source_name,url) in enumerate(sources):
-            r=session.get(url,timeout=90); r.raise_for_status()
-            doc=pymupdf.open(stream=r.content,filetype='pdf')
-            for page_no in range(min(6,len(doc))):
-              for item in doc[page_no].get_images(full=True):
-                xref=item[0]
-                try:
-                  info=doc.extract_image(xref); data=info['image']; ext=info.get('ext','').lower()
-                  im=Image.open(io.BytesIO(data)).convert('RGB'); w,h=im.size; ratio=w/max(h,1)
-                  if w<500 or h<260 or ratio<0.45 or ratio>3.5: continue
-                  variance=sum(ImageStat.Stat(im.resize((96,96))).var)/3
-                  if variance<80: continue
-                  photographic=ext in ('jpeg','jpg','jpx')
-                  # Prefer images from the product information, early pages, photographic rasters and useful landscape/square composition.
-                  source_bonus=8_000_000 if source_index==0 else 3_000_000
-                  page_bonus=max(0,5-page_no)*600_000
-                  photo_bonus=5_000_000 if photographic else 0
-                  composition_bonus=800_000 if 0.7<=ratio<=2.2 else 0
-                  score=source_bonus+page_bonus+photo_bonus+composition_bonus+w*h+min(variance,6000)*150
-                  candidates.append((score,source_name,url,page_no,w,h,variance,ext,data,photographic))
-                  print('candidate',source_name,'page',page_no+1,f'{w}x{h}','var',round(variance,1),'ext',ext,'photo',photographic,'score',round(score,1))
-                except Exception as e:
-                  print('skip',source_name,page_no+1,xref,e)
+          page_url='https://unsplash.com/photos/workers-in-protective-suits-inside-a-sterile-laboratory-9gZO2N6leRI'
+          image_url='https://images.unsplash.com/photo-1748002388689-c62b45d5c28b?auto=format&fit=crop&fm=jpg&q=85&w=2400'
+          out=Path('assets/images/context/procondif-cleanroom.jpg')
+          out.parent.mkdir(parents=True,exist_ok=True)
 
-          if not candidates:
-            raise SystemExit('No high-resolution PROCONDIF image found in official TROX PDFs')
-          photos=[c for c in candidates if c[-1]]
-          pool=photos or candidates
-          pool.sort(key=lambda x:x[0],reverse=True)
-          score,source_name,url,page_no,w,h,variance,ext,data,photographic=pool[0]
-          ext='jpg' if ext in ('jpeg','jpg','jpx') else 'png'
-          out=Path('assets/images/trox-official')/f'procondif-pcd.{ext}'
-          for stale in Path('assets/images/trox-official').glob('procondif-pcd.*'):
-            stale.unlink()
-          out.write_bytes(data)
-          check=Image.open(out); cw,ch=check.size
-          if cw<500 or ch<260 or out.stat().st_size<5000:
-            raise SystemExit(f'Extracted PROCONDIF image failed validation: {cw}x{ch}, {out.stat().st_size} bytes')
-          print('SELECTED',source_name,'page',page_no+1,f'{cw}x{ch}',check.format,out.stat().st_size,'bytes','=>',out)
+          r=requests.get(image_url,headers={'User-Agent':'Mozilla/5.0'},timeout=90)
+          r.raise_for_status()
+          data=r.content
+          if len(data)<150_000:
+              raise SystemExit(f'Cleanroom image unexpectedly small: {len(data)} bytes')
 
+          im=Image.open(io.BytesIO(data)).convert('RGB')
+          w,h=im.size
+          if w<1600 or h<900:
+              raise SystemExit(f'Cleanroom image resolution too low: {w}x{h}')
+          if not (1.25 <= w/h <= 2.0):
+              raise SystemExit(f'Unexpected cleanroom image aspect ratio: {w}x{h}')
+
+          # Detect the specific class of corruption seen previously: a large flat pink/magenta stripe.
+          probe=im.resize((240,160))
+          px=list(probe.getdata())
+          pink=sum(1 for rr,gg,bb in px if rr>190 and bb>170 and gg<175)
+          if pink/len(px)>0.08:
+              raise SystemExit(f'Image rejected: suspicious pink/magenta area {pink/len(px):.1%}')
+
+          # Ensure the file has photographic detail rather than a flat placeholder.
+          variance=sum(ImageStat.Stat(probe).var)/3
+          if variance<250:
+              raise SystemExit(f'Image rejected: insufficient photographic detail, variance={variance:.1f}')
+
+          im.save(out,'JPEG',quality=88,optimize=True,progressive=True)
+          check=Image.open(out)
+          check.verify()
+          check=Image.open(out)
+          cw,ch=check.size
+          print('validated',out,cw,ch,out.stat().st_size,'bytes','variance',round(variance,1))
+
+          # Update both placements. Use a local file so there are no runtime hotlinks.
           pages=['trox-healthcare-operating-rooms.html','trox-procondif-pcd.html']
           target_alt='TROX PROCONDIF PCD'
+          tag=(f'<img src="{out.as_posix()}" alt="{target_alt}" loading="lazy" decoding="async" '
+               f'width="{cw}" height="{ch}" class="trox-official-media" style="--trox-media-max:440px;">')
           for filename in pages:
-            p=Path(filename); text=p.read_text(encoding='utf-8')
-            # Replace the image carrying this product alt, irrespective of old host/transformation URL.
-            pat=re.compile(r'<img\b[^>]*alt=["\']'+re.escape(target_alt)+r'["\'][^>]*>',re.I)
-            tag=f'<img src="{out}" alt="{target_alt}" loading="lazy" decoding="async" width="{cw}" height="{ch}" class="trox-official-media" style="--trox-media-max:{min(420,int(cw/1.25))}px;">'
-            text,n=pat.subn(tag,text,count=1)
-            if n!=1:
-              raise SystemExit(f'{filename}: PROCONDIF image tag not found')
-            text=text.replace('src="https://boom-eng.ru/wp-content/themes/boom-theme/assets/images/logo.png"','src="assets/images/boom-engineering-logo.svg"')
-            p.write_text(text,encoding='utf-8')
+              p=Path(filename)
+              text=p.read_text(encoding='utf-8')
+              pat=re.compile(r'<img\b[^>]*alt=["\']'+re.escape(target_alt)+r'["\'][^>]*>',re.I)
+              text,n=pat.subn(tag,text,count=1)
+              if n!=1:
+                  raise SystemExit(f'{filename}: PROCONDIF image tag not found')
+              p.write_text(text,encoding='utf-8')
 
-          css=Path('styles.css'); ct=css.read_text(encoding='utf-8')
-          marker='/* TROX_OFFICIAL_MEDIA_GUARD */'
-          if marker not in ct:
-            ct+='\n/* TROX_OFFICIAL_MEDIA_GUARD */\nimg.trox-official-media{display:block!important;width:auto!important;height:auto!important;max-width:min(var(--trox-media-max,480px),100%)!important;max-height:360px!important;object-fit:contain!important;margin-left:auto;margin-right:auto}\n'
-            css.write_text(ct,encoding='utf-8')
+          # Preserve source/license provenance for future production migration.
+          source=Path('assets/images/context/PROCONDIF-CLEANROOM-SOURCE.txt')
+          source.write_text(
+              'PROCONDIF PCD contextual cleanroom photograph\n'
+              'Source page: '+page_url+'\n'
+              'Photographer/source: TECNIC Bioprocess Solutions\n'
+              'Published: 2025-05-23\n'
+              'License: Unsplash License (free to use)\n'
+              'Downloaded and localized in the repository; no runtime hotlink.\n',
+              encoding='utf-8')
 
-          # Acceptance gates.
-          for filename in pages:
-            text=Path(filename).read_text(encoding='utf-8')
-            if str(out) not in text: raise SystemExit(filename+': local PROCONDIF asset missing after update')
-            if '3011340_procondif_q_240' in text: raise SystemExit(filename+': low-resolution legacy PROCONDIF source remains')
+          # Remove the superseded soft/corrupted local PROCONDIF image if it is no longer referenced.
+          old=Path('assets/images/trox-official/procondif-pcd.jpg')
+          joined=''.join(Path(f).read_text(encoding='utf-8') for f in pages)
+          if old.exists() and old.as_posix() not in joined:
+              old.unlink()
           PY
-      - name: Commit PROCONDIF fix
+      - name: Commit cleanroom image replacement
         shell: bash
         run: |
           set -euo pipefail
-          git add -A assets/images/trox-official/procondif-pcd.* trox-healthcare-operating-rooms.html trox-procondif-pcd.html styles.css
+          git add -A assets/images/context assets/images/trox-official/procondif-pcd.jpg trox-healthcare-operating-rooms.html trox-procondif-pcd.html
           if [ -z "$(git status --porcelain)" ]; then exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Use high-resolution official PROCONDIF PCD image'
+          git commit -m 'Use high-resolution cleanroom image for PROCONDIF PCD'
           git push
