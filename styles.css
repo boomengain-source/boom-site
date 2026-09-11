@@ -21,3 +21,26 @@
 .product-image img.image-unavailable,.detail-image img.image-unavailable{display:none}
 .product-image:has(img.image-unavailable),.detail-image:has(img.image-unavailable){position:relative;background:#f4f7f9}
 .product-image:has(img.image-unavailable)::after,.detail-image:has(img.image-unavailable)::after{content:"Изображение временно недоступно";position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;color:#7a8792;font-size:13px;letter-spacing:.2px}
+
+/* Visual QA hardening: do not upscale raster product imagery above its intrinsic size.
+   Product images stay centered at natural dimensions and are only reduced when the container is smaller. */
+.product-image img,
+.detail-image img,
+[class$="-visual"] img,
+.visual img,
+.detail-photo img,
+.detail-image-real img{
+  width:auto!important;
+  height:auto!important;
+  max-width:calc(100% - 28px)!important;
+  max-height:calc(100% - 28px)!important;
+  object-fit:contain!important;
+  image-rendering:auto!important;
+}
+/* Raster assets around 600 px wide must not be blown up across wide desktop cards. */
+@media(min-width:801px){
+  [class$="-visual"] img,
+  .visual img,
+  .detail-photo img,
+  .detail-image-real img{max-width:min(calc(100% - 32px),520px)!important}
+}
