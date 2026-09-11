@@ -26,14 +26,18 @@ jobs:
           from PIL import Image
 
           html_files=sorted(Path('.').glob('trox-*.html'))
-          errors=[]; warnings=[]; stats={'pages':len(html_files),'img_tags':0,'external':0,'synthetic':0,'missing':0,'local_raster':0}
+          errors=[]; warnings=[]
+          stats={'pages':len(html_files),'img_tags':0,'external':0,'synthetic':0,'missing':0,'local_raster':0,'no_alt':0,'density_checked':0}
           external_rows=[]; synthetic_rows=[]; missing_rows=[]; raster_rows=[]
 
           img_re=re.compile(r'<img\b[^>]*>',re.I)
           src_re=re.compile(r'\bsrc=["\']([^"\']+)["\']',re.I)
           alt_re=re.compile(r'\balt=["\']([^"\']*)["\']',re.I)
+          class_re=re.compile(r'\bclass=["\']([^"\']*)["\']',re.I)
+          style_re=re.compile(r'\bstyle=["\']([^"\']*)["\']',re.I)
           width_re=re.compile(r'\bwidth=["\'](\d+)["\']',re.I)
           height_re=re.compile(r'\bheight=["\'](\d+)["\']',re.I)
+          media_max_re=re.compile(r'--trox-media-max\s*:\s*(\d+)px',re.I)
 
           for page in html_files:
               text=page.read_text(encoding='utf-8',errors='ignore')
@@ -42,7 +46,11 @@ jobs:
                   sm=src_re.search(tag)
                   if not sm:
                       errors.append(f'{page}: img without src'); continue
-                  src=sm.group(1); alt=(alt_re.search(tag).group(1) if alt_re.search(tag) else '')
+                  src=sm.group(1)
+                  am=alt_re.search(tag); alt=am.group(1).strip() if am else ''
+                  if not alt:
+                      stats['no_alt']+=1
+                      errors.append(f'{page}: image without non-empty alt: {src}')
                   if src.startswith(('http://','https://','//')):
                       stats['external']+=1; external_rows.append((str(page),src,alt))
                       errors.append(f'{page}: external image: {src}')
@@ -59,16 +67,31 @@ jobs:
                   if asset.suffix.lower() in {'.png','.jpg','.jpeg','.webp','.gif'}:
                       stats['local_raster']+=1
                       try:
+                          im=Image.open(asset); im.verify()
                           im=Image.open(asset); w,h=im.size
                           declared_w=int(width_re.search(tag).group(1)) if width_re.search(tag) else None
                           declared_h=int(height_re.search(tag).group(1)) if height_re.search(tag) else None
-                          raster_rows.append((str(page),clean,w,h,declared_w,declared_h,alt))
+                          classes=(class_re.search(tag).group(1).split() if class_re.search(tag) else [])
+                          style=style_re.search(tag).group(1) if style_re.search(tag) else ''
+                          mm=media_max_re.search(style)
+                          media_max=int(mm.group(1)) if mm else None
+                          density=(w/media_max if media_max else None)
+                          raster_rows.append((str(page),clean,w,h,declared_w,declared_h,media_max,density,alt))
                           if w < 400 or h < 220:
-                              warnings.append(f'{page}: small raster source {w}x{h}: {clean}')
+                              errors.append(f'{page}: raster source below hard minimum {w}x{h}: {clean}')
                           if declared_w and declared_w>w:
                               errors.append(f'{page}: declared width upscales raster {declared_w}>{w}: {clean}')
                           if declared_h and declared_h>h:
                               errors.append(f'{page}: declared height upscales raster {declared_h}>{h}: {clean}')
+                          if 'trox-official-media' in classes:
+                              if not media_max:
+                                  errors.append(f'{page}: trox-official-media missing --trox-media-max: {clean}')
+                              else:
+                                  stats['density_checked']+=1
+                                  if density < 1.25:
+                                      errors.append(f'{page}: source density {density:.2f}x < 1.25x: {clean}')
+                                  elif density < 1.50:
+                                      warnings.append(f'{page}: source density {density:.2f}x below 1.50x target: {clean}')
                       except Exception as e:
                           errors.append(f'{page}: cannot inspect raster {clean}: {e}')
 
@@ -76,9 +99,12 @@ jobs:
           js_external=re.findall(r"\bimage\s*:\s*['\"](https?://[^'\"]+)",js,re.I)
           for u in js_external:
               errors.append(f'script.js: external product image mapping: {u}')
+          js_synthetic=re.findall(r"\bimage\s*:\s*['\"]([^'\"]+(?:-render|-product)\.svg)['\"]",js,re.I)
+          for u in js_synthetic:
+              errors.append(f'script.js: synthetic product image mapping: {u}')
 
           print('=== TROX IMAGE AUDIT ===')
-          print('pages:',stats['pages'],'img tags:',stats['img_tags'],'external:',stats['external'],'synthetic:',stats['synthetic'],'missing:',stats['missing'],'local raster:',stats['local_raster'])
+          print('pages:',stats['pages'],'img tags:',stats['img_tags'],'external:',stats['external'],'synthetic:',stats['synthetic'],'missing:',stats['missing'],'local raster:',stats['local_raster'],'no-alt:',stats['no_alt'],'density checked:',stats['density_checked'])
           print('\n=== EXTERNAL IMAGES ===')
           for row in external_rows: print(' | '.join(row))
           print('\n=== SYNTHETIC / LEGACY ===')
@@ -86,7 +112,9 @@ jobs:
           print('\n=== MISSING LOCAL ===')
           for row in missing_rows: print(' | '.join(row))
           print('\n=== LOCAL RASTER INVENTORY ===')
-          for page,src,w,h,dw,dh,alt in raster_rows: print(f'{page} | {src} | natural={w}x{h} | declared={dw}x{dh} | {alt}')
+          for page,src,w,h,dw,dh,maxd,density,alt in raster_rows:
+              d=f'{density:.2f}x' if density is not None else 'n/a'
+              print(f'{page} | {src} | natural={w}x{h} | declared={dw}x{dh} | max-display={maxd} | density={d} | {alt}')
           print('\n=== WARNINGS ===')
           for x in warnings: print('WARN:',x)
           print('\n=== ERRORS ===')
@@ -95,3 +123,5 @@ jobs:
           if errors:
               raise SystemExit(1)
           PY
+
+# audit rerun after repository-wide localization
