@@ -1,0 +1,133 @@
+name: Normalize TROX product image display density
+
+on:
+  push:
+    paths:
+      - '.github/workflows/normalize-product-image-density.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Enforce 1.50x minimum source density on all localized TROX rasters
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          from PIL import Image
+
+          pages=sorted(Path('.').glob('trox-*.html'))
+          img_re=re.compile(r'<img\b[^>]*>',re.I)
+          src_re=re.compile(r'\bsrc=["\']([^"\']+)["\']',re.I)
+          class_re=re.compile(r'\bclass=["\']([^"\']*)["\']',re.I)
+          style_re=re.compile(r'\bstyle=["\']([^"\']*)["\']',re.I)
+          width_re=re.compile(r'\bwidth=["\'](\d+)["\']',re.I)
+          height_re=re.compile(r'\bheight=["\'](\d+)["\']',re.I)
+
+          def replace_attr(tag,name,value):
+              pat=re.compile(r'(\b'+re.escape(name)+r'\s*=\s*)(["\']).*?\2',re.I|re.S)
+              if pat.search(tag):
+                  return pat.sub(lambda m:m.group(1)+'"'+value+'"',tag,count=1)
+              return tag[:-1]+f' {name}="{value}">'
+
+          def add_class(tag,name):
+              m=class_re.search(tag); classes=m.group(1).split() if m else []
+              if name not in classes: classes.append(name)
+              return replace_attr(tag,'class',' '.join(classes))
+
+          def set_media_max(tag,max_display):
+              m=style_re.search(tag); style=m.group(1).strip() if m else ''
+              style=re.sub(r'--trox-media-max\s*:\s*\d+px\s*;?','',style,flags=re.I).strip()
+              if style and not style.endswith(';'): style+=';'
+              style+=f'--trox-media-max:{max_display}px;'
+              return replace_attr(tag,'style',style)
+
+          changed=0; inventory=[]
+          for page in pages:
+              text=page.read_text(encoding='utf-8')
+              def repl(m):
+                  nonlocal_placeholder = None
+                  tag=m.group(0); sm=src_re.search(tag)
+                  if not sm: return tag
+                  src=sm.group(1).split('?',1)[0].split('#',1)[0]
+                  if not src.startswith('assets/images/trox-official/'):
+                      return tag
+                  path=Path(src)
+                  if path.suffix.lower() not in {'.png','.jpg','.jpeg','.webp','.gif'}:
+                      return tag
+                  if not path.exists(): raise RuntimeError(f'{page}: missing {path}')
+                  im=Image.open(path); w,h=im.size
+                  if w<400 or h<220: raise RuntimeError(f'{page}: source below hard minimum {w}x{h}: {path}')
+                  max_display=min(440,int(w/1.50))
+                  if max_display < 240:
+                      raise RuntimeError(f'{page}: source too narrow for acceptable presentation at 1.50x: {w}px')
+                  new=tag
+                  new=replace_attr(new,'width',str(w)); new=replace_attr(new,'height',str(h))
+                  new=add_class(new,'trox-official-media')
+                  new=set_media_max(new,max_display)
+                  inventory.append((str(page),src,w,h,max_display,w/max_display))
+                  return new
+              new_text=img_re.sub(repl,text)
+              if new_text!=text:
+                  changed+=1; page.write_text(new_text,encoding='utf-8')
+
+          css=Path('styles.css'); ct=css.read_text(encoding='utf-8')
+          marker='/* TROX_OFFICIAL_MEDIA_GUARD */'
+          rule='img.trox-official-media{display:block!important;width:auto!important;height:auto!important;max-width:min(var(--trox-media-max,440px),100%)!important;max-height:360px!important;object-fit:contain!important;margin-left:auto!important;margin-right:auto!important}'
+          if marker in ct:
+              ct=re.sub(r'/\* TROX_OFFICIAL_MEDIA_GUARD \*/\s*img\.trox-official-media\{[^}]*\}',marker+'\n'+rule,ct,flags=re.S)
+          else:
+              ct+='\n'+marker+'\n'+rule+'\n'
+          css.write_text(ct,encoding='utf-8')
+
+          # Independent acceptance pass from written HTML and actual files.
+          errors=[]; checked=0
+          for page in pages:
+              text=page.read_text(encoding='utf-8')
+              for tag in img_re.findall(text):
+                  sm=src_re.search(tag)
+                  if not sm: continue
+                  src=sm.group(1).split('?',1)[0].split('#',1)[0]
+                  if not src.startswith('assets/images/trox-official/') or Path(src).suffix.lower() not in {'.png','.jpg','.jpeg','.webp','.gif'}:
+                      continue
+                  checked+=1
+                  classes=(class_re.search(tag).group(1).split() if class_re.search(tag) else [])
+                  style=(style_re.search(tag).group(1) if style_re.search(tag) else '')
+                  mm=re.search(r'--trox-media-max\s*:\s*(\d+)px',style,re.I)
+                  if 'trox-official-media' not in classes or not mm:
+                      errors.append(f'{page}: missing media guard: {src}'); continue
+                  maxd=int(mm.group(1)); w,h=Image.open(src).size
+                  if w/maxd < 1.50:
+                      errors.append(f'{page}: density {w/maxd:.3f}x < 1.50x: {src}')
+                  dw=int(width_re.search(tag).group(1)) if width_re.search(tag) else None
+                  dh=int(height_re.search(tag).group(1)) if height_re.search(tag) else None
+                  if dw!=w or dh!=h:
+                      errors.append(f'{page}: width/height metadata mismatch for {src}')
+          print('pages changed:',changed,'localized raster instances checked:',checked)
+          for row in inventory:
+              print(f'{row[0]} | {row[1]} | natural={row[2]}x{row[3]} | max-display={row[4]} | density={row[5]:.2f}x')
+          if errors:
+              print('\n'.join('ERROR: '+e for e in errors)); raise SystemExit(1)
+          print('1.50x density acceptance: PASS')
+          PY
+      - name: Commit density normalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A trox-*.html styles.css
+          if [ -z "$(git status --porcelain)" ]; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Enforce 1.50x product image source density'
+          git push
