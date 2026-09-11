@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - '.github/workflows/catalog-image-audit.yml'
+      - 'trox-*.html'
+      - 'script.js'
+      - 'styles.css'
+      - 'assets/images/**'
   workflow_dispatch:
 
 permissions:
@@ -64,6 +68,9 @@ jobs:
                       stats['missing']+=1; missing_rows.append((str(page),clean,alt))
                       errors.append(f'{page}: missing local image: {clean}')
                       continue
+                  classes=(class_re.search(tag).group(1).split() if class_re.search(tag) else [])
+                  if 'trox-official-media' in classes and asset.suffix.lower()=='.gif':
+                      errors.append(f'{page}: animated GIF is not allowed as final product media: {clean}')
                   if asset.suffix.lower() in {'.png','.jpg','.jpeg','.webp','.gif'}:
                       stats['local_raster']+=1
                       try:
@@ -71,7 +78,6 @@ jobs:
                           im=Image.open(asset); w,h=im.size
                           declared_w=int(width_re.search(tag).group(1)) if width_re.search(tag) else None
                           declared_h=int(height_re.search(tag).group(1)) if height_re.search(tag) else None
-                          classes=(class_re.search(tag).group(1).split() if class_re.search(tag) else [])
                           style=style_re.search(tag).group(1) if style_re.search(tag) else ''
                           mm=media_max_re.search(style)
                           media_max=int(mm.group(1)) if mm else None
@@ -123,5 +129,3 @@ jobs:
           if errors:
               raise SystemExit(1)
           PY
-
-# audit rerun after 1.50x density normalization
