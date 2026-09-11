@@ -146,3 +146,64 @@ function applyDetailUpdates(detail) {
 }
 document.querySelectorAll('.product-card').forEach((card)=>{applyOfficialTroxMedia(card,'h2');applyVerifiedSpecs(card);});
 document.querySelectorAll('.model-detail').forEach((detail)=>{applyOfficialTroxMedia(detail,'h2');applyDetailUpdates(detail);});
+
+// Visual QA mode for staging: append ?qa=1 to any catalogue URL.
+// This catches missing images, failed loads, legacy placeholders and raster upscaling risks.
+if (new URLSearchParams(window.location.search).get('qa') === '1') {
+  window.addEventListener('load', () => {
+    const productCardSelector = [
+      '.product-card','.vav-card','.ad-card','.fd-card','.safe-card',
+      '.ac-card','.cat-card','.ahu-card','.clean-card','.med-card'
+    ].join(',');
+    const issues = [];
+    const qaCards = [...document.querySelectorAll(productCardSelector)];
+
+    qaCards.forEach((card, index) => {
+      const title = card.querySelector('h2,h3')?.textContent.trim() || `card-${index + 1}`;
+      const img = card.querySelector('img');
+      if (!img) {
+        issues.push({severity:'ERROR', model:title, problem:'Нет изображения в товарной карточке'});
+        return;
+      }
+      const src = img.currentSrc || img.src || '';
+      if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) {
+        issues.push({severity:'ERROR', model:title, problem:'Изображение не загрузилось', src});
+        return;
+      }
+      if (/-product\.svg(?:$|\?)/i.test(src)) {
+        issues.push({severity:'ERROR', model:title, problem:'Обнаружена legacy SVG-заглушка', src});
+      }
+      if (!img.alt || !img.alt.trim()) {
+        issues.push({severity:'ERROR', model:title, problem:'Пустой alt', src});
+      }
+      const rect = img.getBoundingClientRect();
+      const ratioX = rect.width ? img.naturalWidth / rect.width : 0;
+      const ratioY = rect.height ? img.naturalHeight / rect.height : 0;
+      const density = Math.min(ratioX || Infinity, ratioY || Infinity);
+      if (density < 1.0) {
+        issues.push({severity:'ERROR', model:title, problem:`Растровое изображение увеличено браузером (${density.toFixed(2)}× source/CSS)`, src});
+      } else if (density < 1.25) {
+        issues.push({severity:'WARN', model:title, problem:`Низкий запас резкости (${density.toFixed(2)}×); заменить источник или уменьшить вывод`, src});
+      }
+    });
+
+    [...document.querySelectorAll('.model-detail')].forEach((detail, index) => {
+      const title = detail.querySelector('h1,h2,h3')?.textContent.trim() || `detail-${index + 1}`;
+      const img = detail.querySelector('img');
+      if (!img) issues.push({severity:'ERROR', model:title, problem:'Нет изображения в детальной карточке'});
+    });
+
+    const errors = issues.filter(i => i.severity === 'ERROR').length;
+    const warnings = issues.filter(i => i.severity === 'WARN').length;
+    console.group(`BOOM TROX visual QA: ${errors} errors, ${warnings} warnings`);
+    if (issues.length) console.table(issues); else console.info('PASS: visual image gates passed');
+    console.groupEnd();
+
+    const panel = document.createElement('div');
+    panel.id = 'visual-qa-panel';
+    panel.style.cssText = `position:fixed;z-index:99999;right:12px;bottom:12px;max-width:430px;max-height:45vh;overflow:auto;padding:12px 14px;border-radius:6px;font:12px/1.4 Arial,sans-serif;color:#fff;background:${errors ? '#a51616' : warnings ? '#9a6500' : '#147a42'};box-shadow:0 8px 30px rgba(0,0,0,.28)`;
+    panel.innerHTML = `<b>Visual QA: ${errors ? 'FAIL' : warnings ? 'WARN' : 'PASS'}</b><br>Ошибок: ${errors}; предупреждений: ${warnings}` +
+      (issues.length ? `<ol style="margin:8px 0 0;padding-left:18px">${issues.slice(0,12).map(i=>`<li><b>${i.model}</b>: ${i.problem}</li>`).join('')}</ol>` : '');
+    document.body.appendChild(panel);
+  });
+}
