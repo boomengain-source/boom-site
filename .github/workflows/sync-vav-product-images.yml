@@ -1,0 +1,70 @@
+name: Sync official TROX VAV product images
+
+on:
+  push:
+    paths:
+      - '.github/workflows/sync-vav-product-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download official TROX product images
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/images/trox-official
+
+          download() {
+            local url="$1"
+            local output="$2"
+            echo "Downloading $output"
+            curl --fail --location --retry 4 --retry-delay 2 \
+              --connect-timeout 20 --max-time 120 \
+              -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36' \
+              -e 'https://www.trox.de/' \
+              "$url" -o "$output"
+            test -s "$output"
+            file "$output"
+          }
+
+          download 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiI5MTkyMjYzOGJiMDlmYTY0L2IwMmZmOGI4NmMzMC9UVlItaW50cm9kdWN0aW9uLWltYWdlLnBuZyIsIm9ial9pZCI6IjkxOTIyNjM4YmIwOWZhNjQiLCJ0cmFuc2Zvcm1hdGlvbl9kZWZpbml0aW9uIjp7IndpZHRoIjo2MDB9fQ%3D%3D--0bc0e3e036944e76e1083b5d46a87ccd1fdc2076' 'assets/images/trox-official/tvr.png'
+          download 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJmOTBhMzEwNzdiOTU2MTM4LzZmZTllN2E0NjA5Yy9UVkotaW50cm9kdWN0aW9uLWltYWdlLTIuMC5wbmciLCJvYmpfaWQiOiJmOTBhMzEwNzdiOTU2MTM4IiwidHJhbnNmb3JtYXRpb25fZGVmaW5pdGlvbiI6eyJ3aWR0aCI6NjAwfX0%3D--3dd5c7906e4835fd085c80f962c1500eff64513e' 'assets/images/trox-official/tvj.png'
+          download 'https://www.trox.de/__scrivito/to_binary?encrypted_params=eyJiaW5hcnlfaWQiOiJiYjQ2ZjJhNDhlYWQwZGU1L2YxMThjM2QwNTc5YS9UVlQtaW50cm9kdWN0aW9uLWltYWdlLTIuMC5wbmciLCJvYmpfaWQiOiJiYjQ2ZjJhNDhlYWQwZGU1IiwidHJhbnNmb3JtYXRpb25fZGVmaW5pdGlvbiI6eyJ3aWR0aCI6NjAwfX0%3D--aa0ac897066715a1c98d04452db1f9d941adf978' 'assets/images/trox-official/tvt.png'
+          download 'https://cdn.trox.de/531e0bfabc67d97a/b20ef01a1037/v/50b3485a8597/TVZ-introduction-image.png' 'assets/images/trox-official/tvz.png'
+
+          python - <<'PY'
+          from pathlib import Path
+          import imghdr
+          paths = list(Path('assets/images/trox-official').glob('*.png'))
+          if len(paths) != 4:
+              raise SystemExit(f'Expected 4 images, got {len(paths)}')
+          for p in paths:
+              kind = imghdr.what(p)
+              if kind not in {'png', 'jpeg', 'gif', 'webp'}:
+                  raise SystemExit(f'{p}: invalid image type {kind}')
+              if p.stat().st_size < 10_000:
+                  raise SystemExit(f'{p}: suspiciously small ({p.stat().st_size} bytes)')
+              print(p, kind, p.stat().st_size)
+          PY
+
+      - name: Commit downloaded images
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- assets/images/trox-official; then
+            echo 'No image changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/images/trox-official
+          git commit -m 'Localize official TROX VAV product images'
+          git push
