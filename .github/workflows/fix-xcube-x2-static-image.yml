@@ -1,0 +1,82 @@
+name: Fix X-CUBE X2 static image quality
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-xcube-x2-static-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract the best bright product frame and replace animated GIF
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pillow numpy
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageSequence
+          import numpy as np
+          import re
+
+          src = Path('assets/images/trox-official/x-cube-x2.gif')
+          dst = Path('assets/images/trox-official/x-cube-x2-static.png')
+          if not src.exists():
+              print('Source GIF already removed; nothing to do.')
+              raise SystemExit(0)
+
+          im = Image.open(src)
+          candidates = []
+          for i, raw in enumerate(ImageSequence.Iterator(im)):
+              rgba = raw.convert('RGBA')
+              bg = Image.new('RGBA', rgba.size, 'white')
+              frame = Image.alpha_composite(bg, rgba).convert('RGB')
+              arr = np.asarray(frame).astype(np.float32)
+              gray = arr[...,0]*0.2126 + arr[...,1]*0.7152 + arr[...,2]*0.0722
+              content = gray < 248
+              frac = float(content.mean())
+              if frac < 0.03:
+                  score = -1e9
+                  content_lum = 255.0
+              else:
+                  content_lum = float(gray[content].mean())
+                  border = np.concatenate([gray[0,:], gray[-1,:], gray[:,0], gray[:,-1]])
+                  border_lum = float(border.mean())
+                  score = border_lum*2.0 + content_lum + frac*50.0
+              candidates.append((score, i, frame, frac, content_lum))
+
+          candidates.sort(key=lambda x: x[0], reverse=True)
+          score, idx, best, frac, lum = candidates[0]
+          best.save(dst, format='PNG', optimize=True)
+          print(f'Selected frame {idx}/{len(candidates)-1}: score={score:.2f}, content_fraction={frac:.3f}, content_luminance={lum:.1f}, size={best.size[0]}x{best.size[1]}')
+          print('Top candidates:', [(round(s,1), i, round(f,3), round(l,1)) for s,i,_,f,l in candidates[:8]])
+
+          changed = []
+          for p in list(Path('.').glob('trox-*.html')) + [Path('script.js')]:
+              if not p.exists():
+                  continue
+              text = p.read_text(encoding='utf-8')
+              if 'assets/images/trox-official/x-cube-x2.gif' not in text:
+                  continue
+              new = text.replace('assets/images/trox-official/x-cube-x2.gif', 'assets/images/trox-official/x-cube-x2-static.png')
+              p.write_text(new, encoding='utf-8')
+              changed.append(str(p))
+          print('Updated references:', changed)
+          PY
+          git rm assets/images/trox-official/x-cube-x2.gif
+          git add assets/images/trox-official/x-cube-x2-static.png trox-*.html script.js || true
+          if git diff --cached --quiet; then
+            echo 'No X-CUBE X2 changes required.'
+            exit 0
+          fi
+          git config user.name 'boomengain-source'
+          git config user.email 'boomeng.ain@gmail.com'
+          git commit -m 'Use a clear static official X-CUBE X2 product image'
+          git pull --rebase origin main
+          git push origin HEAD:main
