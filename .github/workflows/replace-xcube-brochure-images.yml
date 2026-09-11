@@ -1,0 +1,109 @@
+name: Replace X-CUBE X2 images with verified brochure product photos
+
+on:
+  push:
+    paths:
+      - '.github/workflows/replace-xcube-brochure-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  replace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract verified official product images and patch references
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils
+          python -m pip install --disable-pip-version-check pillow
+          rm -rf /tmp/xcube-brochures
+          mkdir -p /tmp/xcube-brochures/x2 /tmp/xcube-brochures/compact
+          curl -fL --retry 3 'https://cdn.trox.de/408c51c934e638ad/7aa96fe0a61d/SB_2019_06_X-CubeX2_DE_en_web.pdf' -o /tmp/xcube-brochures/x2.pdf
+          curl -fL --retry 3 'https://cdn.trox.de/d8c06db243badc2e/28e6b0d34e11/SB_2024_01_XCUBE_compact_EN_web.pdf' -o /tmp/xcube-brochures/compact.pdf
+          pdfimages -all /tmp/xcube-brochures/x2.pdf /tmp/xcube-brochures/x2/img
+          pdfimages -all /tmp/xcube-brochures/compact.pdf /tmp/xcube-brochures/compact/img
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import re, shutil
+
+          outdir=Path('assets/images/trox-official')
+          outdir.mkdir(parents=True,exist_ok=True)
+
+          # Manually verified from the official TROX brochure contact-sheet QA:
+          # X2 img-001 = complete white X-CUBE X2 unit on white background.
+          # compact img-006 = complete X-CUBE X2 compact unit, not a chart/schematic.
+          x2_src=Path('/tmp/xcube-brochures/x2/img-001.jpg')
+          compact_src=Path('/tmp/xcube-brochures/compact/img-006.jp2')
+          if not x2_src.exists(): raise SystemExit(f'Missing expected official X2 asset: {x2_src}')
+          if not compact_src.exists(): raise SystemExit(f'Missing expected official compact asset: {compact_src}')
+
+          x2=Image.open(x2_src).convert('RGB')
+          compact=Image.open(compact_src).convert('RGB')
+          if x2.size != (557,330): raise SystemExit(f'Unexpected X2 asset dimensions: {x2.size}')
+          if compact.size != (1502,1235): raise SystemExit(f'Unexpected compact asset dimensions: {compact.size}')
+
+          x2_dst=outdir/'x-cube-x2-static.jpg'
+          compact_dst=outdir/'x-cube-x2-compact.jpg'
+          x2.save(x2_dst,'JPEG',quality=95,optimize=True,progressive=True)
+          compact.save(compact_dst,'JPEG',quality=95,optimize=True,progressive=True)
+
+          old_png=outdir/'x-cube-x2-static.png'
+          if old_png.exists(): old_png.unlink()
+
+          def patch_img_tag(text,src,width,height,max_display):
+              pat=re.compile(r'<img\b[^>]*\bsrc=["\']'+re.escape(src)+r'["\'][^>]*>',re.I)
+              def repl(m):
+                  tag=m.group(0)
+                  tag=re.sub(r'\bwidth=["\']\d+["\']',f'width="{width}"',tag,flags=re.I)
+                  tag=re.sub(r'\bheight=["\']\d+["\']',f'height="{height}"',tag,flags=re.I)
+                  if not re.search(r'\bwidth=',tag,re.I): tag=tag[:-1]+f' width="{width}">'
+                  if not re.search(r'\bheight=',tag,re.I): tag=tag[:-1]+f' height="{height}">'
+                  if re.search(r'--trox-media-max\s*:\s*\d+px',tag,re.I):
+                      tag=re.sub(r'--trox-media-max\s*:\s*\d+px',f'--trox-media-max:{max_display}px',tag,flags=re.I)
+                  elif re.search(r'\bstyle=["\']',tag,re.I):
+                      tag=re.sub(r'\bstyle=(["\'])',lambda mm:f'style={mm.group(1)}--trox-media-max:{max_display}px;',tag,count=1,flags=re.I)
+                  else:
+                      tag=tag[:-1]+f' style="--trox-media-max:{max_display}px;">'
+                  return tag
+              return pat.sub(repl,text)
+
+          changed=[]
+          for p in sorted(Path('.').glob('trox-*.html')):
+              text=p.read_text(encoding='utf-8')
+              orig=text
+              text=text.replace('assets/images/trox-official/x-cube-x2-static.png','assets/images/trox-official/x-cube-x2-static.jpg')
+              text=patch_img_tag(text,'assets/images/trox-official/x-cube-x2-static.jpg',557,330,360)
+              text=patch_img_tag(text,'assets/images/trox-official/x-cube-x2-compact.jpg',1502,1235,440)
+              if text!=orig:
+                  p.write_text(text,encoding='utf-8')
+                  changed.append(str(p))
+
+          js=Path('script.js')
+          if js.exists():
+              text=js.read_text(encoding='utf-8')
+              new=text.replace('assets/images/trox-official/x-cube-x2-static.png','assets/images/trox-official/x-cube-x2-static.jpg')
+              if new!=text:
+                  js.write_text(new,encoding='utf-8')
+                  changed.append('script.js')
+
+          print('X2 output:',x2_dst,x2.size)
+          print('Compact output:',compact_dst,compact.size)
+          print('Patched:',changed)
+          PY
+          git add assets/images/trox-official/x-cube-x2-static.jpg assets/images/trox-official/x-cube-x2-compact.jpg trox-*.html script.js || true
+          git add -u assets/images/trox-official/x-cube-x2-static.png || true
+          if git diff --cached --quiet; then
+            echo 'No X-CUBE image changes required.'
+            exit 0
+          fi
+          git config user.name 'boomengain-source'
+          git config user.email 'boomeng.ain@gmail.com'
+          git commit -m 'Use verified official product photos for X-CUBE X2 and X2 compact'
+          git pull --rebase origin main
+          git push origin HEAD:main
